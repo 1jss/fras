@@ -69,6 +69,22 @@ test("rules: retroflex sources and vowel length", () => {
   assert.equal(applyRules("mat", SV_RULES_COMPILED), "mA:t");
 });
 
+test("rules: unstressed vowels reduce and soft consonants stay hard", () => {
+  assert.equal(applyRules("abbedissa", SV_RULES_COMPILED), "abedIsa");
+  assert.equal(applyRules("vägen", SV_RULES_COMPILED), "vE:gen");
+  assert.equal(applyRules("boken", SV_RULES_COMPILED), "bu:ken");
+  assert.equal(applyRules("fisken", SV_RULES_COMPILED), "fIsken");
+  assert.equal(applyRules("flickorna", SV_RULES_COMPILED), "flIkUn`a");
+  assert.equal(applyRules("hästarna", SV_RULES_COMPILED), "hEstan`a");
+});
+
+test("rules: lj, gt and the -era paradigm", () => {
+  assert.equal(applyRules("ljus", SV_RULES_COMPILED), "j}:s");
+  assert.equal(applyRules("biljett", SV_RULES_COMPILED), "bIljet");
+  assert.equal(applyRules("sagt", SV_RULES_COMPILED), "sakt");
+  assert.equal(applyRules("studera", SV_RULES_COMPILED), "st}:de:ra");
+});
+
 test("syllabify inserts boundaries before onsets", () => {
   assert.equal(syllabify("gA:ta"), "gA:$ta");
   assert.equal(syllabify("mEnIx\\a"), "mE$nI$x\\a");

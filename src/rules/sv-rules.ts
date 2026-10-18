@@ -82,6 +82,16 @@ function vowelRules(): Rule[] {
  * earlier rule wins, so context-specific rules precede generic ones.
  */
 export const SV_RULES: readonly Rule[] = [
+  // --- unstressed vowels ----------------------------------------------------
+  // These rules assume primary stress on the first syllable: any later vowel is
+  // unstressed, so it is short and `e` loses its [E] colour (e -> [e]).
+  { m: "e", l: `.*[${VOW}].*`, o: "e", note: "unstressed e -> [e]" },
+  { m: "i", l: `.*[${VOW}].*`, o: "I", note: "unstressed i" },
+  { m: "a", l: `.*[${VOW}].*`, o: "a", note: "unstressed a" },
+  // Unstressed prefixes be-/ge- (word-initial).
+  { m: "e", l: "^b", o: "e", note: "be- prefix" },
+  { m: "e", l: "^g", o: "e", note: "ge- prefix" },
+
   ...vowelRules(),
 
   // --- common endings (longer than a single grapheme, so they win) ---
@@ -89,6 +99,34 @@ export const SV_RULES: readonly Rule[] = [
   { m: "ade", r: "$", o: "a$de" },
   { m: "ande", r: "$", o: "an$de" },
   { m: "ende", r: "$", o: "En$de" },
+
+  // Definite plural / genitive: linking vowel reduced, `r` retroflexed.
+  { m: "ernas", o: "en`as" },
+  { m: "erna", o: "en`a" },
+  { m: "arnas", o: "an`as" },
+  { m: "arna", o: "an`a" },
+  { m: "ornas", o: "Un`as" },
+  { m: "orna", o: "Un`a" },
+
+  // -era verbs: stressed long e (studera, regering).
+  { m: "eringens", o: "e:rINens" },
+  { m: "eringarna", o: "e:rINan`a" },
+  { m: "eringar", o: "e:rINar" },
+  { m: "eringen", o: "e:rINen" },
+  { m: "ering", o: "e:rIN" },
+  { m: "erades", o: "e:ra$des" },
+  { m: "erade", o: "e:ra$de" },
+  { m: "erats", o: "e:rats" },
+  { m: "erar", o: "e:rar" },
+  { m: "eras", o: "e:ras" },
+  { m: "erat", o: "e:rat" },
+  { m: "era", o: "e:ra" },
+
+  // Intervocalic g/k/sk stay hard: root-final before a suffix vowel (vägen,
+  // boken, fisken). Softening only applies word-initially or after a consonant.
+  { m: "g", l: `[${VOW}]`, r: `^[eiyäö]`, o: "g", note: "hard g between vowels" },
+  { m: "k", l: `[${VOW}]`, r: `^[eiyäö]`, o: "k", note: "hard k between vowels" },
+  { m: "sk", l: `[${VOW}]`, r: `^[eiyäö]`, o: "sk", note: "hard sk between vowels" },
 
   // --- sibilants / sje ---
   { m: "sch", o: "x\\" },
@@ -107,7 +145,7 @@ export const SV_RULES: readonly Rule[] = [
   // --- j sounds ---
   { m: "dj", o: "j" },
   { m: "hj", o: "j" },
-  { m: "lj", o: "j" },
+  { m: "lj", l: "^", o: "j", note: "lj is [j] word-initially only" },
   { m: "gj", o: "j" },
 
   // --- g ---
@@ -132,10 +170,16 @@ export const SV_RULES: readonly Rule[] = [
   { m: "rn", o: "n`" },
   { m: "rl", o: "l`" },
   { m: "rs", o: "s`" },
+  // Also retroflex when the `r` was already consumed (geminate): abborr+träsk.
+  { m: "t", l: "r", o: "t`" },
+  { m: "d", l: "r", o: "d`" },
+  { m: "l", l: "r", o: "l`" },
+  { m: "s", l: "r", o: "s`" },
 
   // --- loan digraphs ---
   { m: "th", o: "t" },
   { m: "ph", o: "f" },
+  { m: "gt", o: "kt", note: "g before t is [k] (-igt, sagt, lagt)" },
 
   // --- x / z / w / q ---
   { m: "x", o: "ks" },

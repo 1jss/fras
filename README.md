@@ -118,9 +118,9 @@ text ─▶ tokenize
 ## Status
 
 v1: lexicon + adapter + rules + morphology + eval + prune. The rule layer is a
-**headstart**: it reproduces NST's phonemes for ~20% of the lexicon today, and all of
+**headstart**: it reproduces NST's phonemes for ~29% of the lexicon today, and all of
 that is now pruned from the production lexicon and routed to the rules (2% match the
-full string; 18% need a small structure correction). The remaining 80% is mostly
+full string; 26% need a small structure correction). The remaining ~71% is mostly
 stress and loanword vowel length in the rules — the intended target for a learned
 model behind the same `G2P` seam.
 
