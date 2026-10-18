@@ -1,0 +1,32 @@
+{
+  "name": "fras",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Swedish grapheme-to-phoneme system: full NST lexicon + generic rules, emitting the phoneme alphabet Piper's Swedish voices can voice (pre-espeak-ng PR #2364).",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "bin": {
+    "fras": "src/cli.ts"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": ["dist", "data"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:lexicon": "node tools/build-lexicon.ts",
+    "eval": "node tools/eval.ts",
+    "audit": "node tools/audit-voice.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
