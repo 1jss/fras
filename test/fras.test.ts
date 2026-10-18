@@ -4,13 +4,23 @@ import { gzipSync } from "node:zlib";
 
 import { parseNst, syllabify as groupSyllables } from "../src/sampa.ts";
 import { toVoiceIpa } from "../src/to-voice-ipa.ts";
-import { applyRules } from "../src/rules/engine.ts";
+import { applyRules, applyRulesTrace } from "../src/rules/engine.ts";
 import { SV_RULES_COMPILED } from "../src/rules/sv-rules.ts";
 import { syllabify } from "../src/syllable.ts";
-import { parseLexicon, type Lexicon, type LexiconEntry } from "../src/lexicon.ts";
+import {
+  parseLexicon,
+  parseRuleIndex,
+  type Lexicon,
+  type LexiconEntry,
+} from "../src/lexicon.ts";
 import { morphological } from "../src/morphology.ts";
 import { annotate } from "../src/annotate.ts";
-import { phonetizeWord, textToIpa } from "../src/phonetize.ts";
+import {
+  applyStructureCorrection,
+  phonemeSequence,
+  phonetizeWord,
+  textToIpa,
+} from "../src/phonetize.ts";
 
 test("parseNst splits symbols, stress and boundaries", () => {
   const tokens = parseNst('""gA:$ta');
@@ -120,4 +130,37 @@ test("phonetizeWord uses overrides before the lexicon", () => {
 test("textToIpa joins words and keeps punctuation", () => {
   const lex = mockLexicon({ hej: ['"hEj'] });
   assert.equal(textToIpa("Hej!", { lexicon: lex, morphology: false }), "ˈhɛj!");
+});
+
+test("applyRulesTrace records the grapheme span behind each output", () => {
+  const trace = applyRulesTrace("kemi", SV_RULES_COMPILED);
+  assert.equal(trace.output, "s'e:mI");
+  assert.deepEqual(
+    trace.steps.map((s) => [s.grapheme, s.o]),
+    [
+      ["k", "s'"],
+      ["e", "e:"],
+      ["m", "m"],
+      ["i", "I"],
+    ],
+  );
+});
+
+test("phonemeSequence drops stress and boundaries", () => {
+  assert.equal(phonemeSequence('""gA:$ta'), "gA:ta");
+  assert.equal(phonemeSequence("gA:$ta"), "gA:ta");
+});
+
+test("applyStructureCorrection re-renders with NST structure", () => {
+  assert.equal(applyStructureCorrection("gA:$ta", [[2, '$"']]), 'gA:$"ta');
+  assert.equal(applyStructureCorrection("gA:$ta", []), "gA:$ta");
+});
+
+test("parseRuleIndex reads gzipped rule-covered words", () => {
+  const raw = '{"w":"gata","prefixes":[[2,"$\\""]]}\n{"w":"hej","prefixes":[]}\n';
+  const index = parseRuleIndex(gzipSync(Buffer.from(raw)));
+  assert.equal(index.size, 2);
+  assert.deepEqual(index.lookup("GATA")!.prefixes, [[2, '$"']]);
+  assert.deepEqual(index.lookup("hej")!.prefixes, []);
+  assert.equal(index.lookup("nope"), null);
 });

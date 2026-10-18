@@ -33,20 +33,37 @@ export {
 } from "./to-voice-ipa.ts";
 export {
   lexicon,
+  fullLexicon,
   parseLexicon,
+  ruleIndex,
+  parseRuleIndex,
+  FULL_LEXICON_PATH,
+  PRUNED_LEXICON_PATH,
+  RULE_INDEX_PATH,
   type Lexicon,
   type LexiconEntry,
+  type RuleIndex,
+  type RuleEntry,
 } from "./lexicon.ts";
 export { morphological, SUFFIXES, type MorphResult } from "./morphology.ts";
 export { syllabify as syllabifySampa, stripStress, assignStress, syllableCount } from "./syllable.ts";
 export { SV_RULES, SV_RULES_COMPILED } from "./rules/sv-rules.ts";
-export { compileRules, applyRules, type Rule } from "./rules/engine.ts";
+export {
+  compileRules,
+  applyRules,
+  applyRulesTrace,
+  type Rule,
+  type RuleStep,
+  type RuleTrace,
+} from "./rules/engine.ts";
 export {
   phonetize,
   phonetizeWord,
   phonetizeText,
   wordToIpa,
   textToIpa,
+  applyStructureCorrection,
+  phonemeSequence,
   type PhonetizeOptions,
   type PhonemeSource,
   type WordResult,

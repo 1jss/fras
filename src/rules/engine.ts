@@ -59,21 +59,51 @@ function bestMatch(text: string, i: number, rules: CompiledRule[]): CompiledRule
   return best;
 }
 
-/** Apply compiled rules to a word, returning an NST SAMPA segment string. */
-export function applyRules(word: string, rules: CompiledRule[]): string {
+/** One applied step: the grapheme span consumed and the NST SAMPA it produced. */
+export interface RuleStep {
+  /** Start index in the lowercased word. */
+  start: number;
+  /** The grapheme span that was matched (or the single unknown character). */
+  grapheme: string;
+  /** NST SAMPA emitted for this span. */
+  o: string;
+  /** The rule that fired, or `null` when the grapheme was unknown. */
+  rule: CompiledRule | null;
+}
+
+export interface RuleTrace {
+  /** The concatenated NST SAMPA output (same as {@link applyRules}). */
+  output: string;
+  steps: RuleStep[];
+}
+
+/**
+ * Apply compiled rules to a word and record which grapheme span produced which
+ * output. Used by tooling (rule-coverage/divergence reports); the hot path uses
+ * {@link applyRules}.
+ */
+export function applyRulesTrace(word: string, rules: CompiledRule[]): RuleTrace {
   const text = word.toLowerCase();
   let out = "";
   let i = 0;
+  const steps: RuleStep[] = [];
   while (i < text.length) {
     const rule = bestMatch(text, i, rules);
     if (rule) {
+      steps.push({ start: i, grapheme: text.slice(i, i + rule.m.length), o: rule.o, rule });
       out += rule.o;
       i += rule.m.length;
       continue;
     }
     // Unknown grapheme: keep it as-is so nothing is silently lost.
+    steps.push({ start: i, grapheme: text[i]!, o: text[i]!, rule: null });
     out += text[i]!;
     i += 1;
   }
-  return out;
+  return { output: out, steps };
+}
+
+/** Apply compiled rules to a word, returning an NST SAMPA segment string. */
+export function applyRules(word: string, rules: CompiledRule[]): string {
+  return applyRulesTrace(word, rules).output;
 }

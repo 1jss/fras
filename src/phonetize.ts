@@ -2,9 +2,11 @@
  * The phonetization pipeline: word -> canonical NST SAMPA, and text -> IPA.
  *
  * Order of resolution for a word:
- *   1. lexicon lookup (full NST, all variants preserved);
- *   2. morphology (compound split / suffix stripping, lexicon-backed);
- *   3. generic rules (letter-to-sound).
+ *   1. curated overrides;
+ *   2. lexicon lookup (production/pruned NST, all variants preserved);
+ *   3. morphology (compound split / suffix stripping, lexicon-backed);
+ *   4. generic rules (letter-to-sound), plus a stress/boundary correction for
+ *      words the rules already cover phonemically.
  *
  * The canonical output is NST SAMPA. Use {@link wordToIpa} / {@link textToIpa}
  * to render it in the alphabet a Piper voice can voice.
@@ -12,10 +14,16 @@
 
 import { applyRules } from "./rules/engine.ts";
 import { SV_RULES_COMPILED } from "./rules/sv-rules.ts";
-import { lexicon as defaultLexicon, type Lexicon } from "./lexicon.ts";
+import {
+  lexicon as defaultLexicon,
+  ruleIndex as defaultRuleIndex,
+  type Lexicon,
+  type RuleEntry,
+} from "./lexicon.ts";
 import { morphological } from "./morphology.ts";
 import { OVERRIDES } from "../data/overrides.ts";
 import { assignStress, syllabify } from "./syllable.ts";
+import { parseNst } from "./sampa.ts";
 import { toVoiceIpa, SV_PROFILE, type VoiceProfile } from "./to-voice-ipa.ts";
 import { tokenize, type Token } from "./tokenize.ts";
 
@@ -30,6 +38,12 @@ export interface PhonetizeOptions {
   rules?: boolean;
   /** Enable the morphological fallback (default true). */
   morphology?: boolean;
+  /**
+   * Route rule-covered words (the rule index) to the rule layer, skipping
+   * morphology, and apply their structure correction (default true). Only used
+   * with the built-in lexicon — an injected `lexicon` takes over resolution.
+   */
+  ruleIndex?: boolean;
   /** Replace the whole pipeline with a custom G2P (e.g. a learned model). */
   g2p?: G2P;
 }
@@ -70,6 +84,13 @@ export function phonetizeWord(word: string, opts: PhonetizeOptions = {}): WordRe
     }
   }
 
+  // Rule-covered words: use the rules, not morphology. The rule index only applies
+  // to the built-in (production) lexicon; injecting a lexicon takes over resolution.
+  if (opts.lexicon === undefined && (opts.ruleIndex ?? true)) {
+    const ruleEntry = defaultRuleIndex().lookup(word);
+    if (ruleEntry) return rulesResult(word, opts, ruleEntry);
+  }
+
   if (lex && (opts.morphology ?? true)) {
     const morph = morphological(word, lex);
     if (morph) {
@@ -78,12 +99,56 @@ export function phonetizeWord(word: string, opts: PhonetizeOptions = {}): WordRe
   }
 
   if (opts.rules ?? true) {
-    const segments = applyRules(word, SV_RULES_COMPILED);
-    const syllabified = syllabify(segments);
-    return { word, variants: [assignStress(syllabified, 0)], source: "rules" };
+    return rulesResult(word, opts, null);
   }
 
   return { word, variants: [], source: "rules" };
+}
+
+/** Run the rule layer, optionally restoring NST's structure for an indexed word. */
+function rulesResult(
+  word: string,
+  opts: PhonetizeOptions,
+  entry: RuleEntry | null,
+): WordResult {
+  if (!(opts.rules ?? true)) return { word, variants: [], source: "rules" };
+  const segments = applyRules(word, SV_RULES_COMPILED);
+  const out = assignStress(syllabify(segments), 0);
+  const corrected =
+    entry && entry.prefixes.length ? applyStructureCorrection(out, entry.prefixes) : out;
+  return { word, variants: [corrected], source: "rules" };
+}
+
+/**
+ * Re-render a transcription with NST's structure.
+ *
+ * `prefixes` gives the structure tokens (`$`, stress, `¤`, `_`) that precede each
+ * phoneme index; the rule output's own syllables/stress are discarded and the
+ * phonemes are re-emitted with NST's layout.
+ */
+export function applyStructureCorrection(
+  transcription: string,
+  prefixes: Array<[number, string]>,
+): string {
+  if (prefixes.length === 0) return transcription;
+  const phonemes = parseNst(transcription)
+    .filter((t) => t.type === "phoneme")
+    .map((t) => t.symbol);
+  const byIndex = new Map(prefixes);
+  let out = "";
+  for (let i = 0; i < phonemes.length; i += 1) {
+    out += byIndex.get(i) ?? "";
+    out += phonemes[i]!;
+  }
+  return out;
+}
+
+/** Phonemes only, order-preserving; used for rule-coverage comparison. */
+export function phonemeSequence(s: string): string {
+  return parseNst(s)
+    .filter((t) => t.type === "phoneme")
+    .map((t) => t.symbol)
+    .join("");
 }
 
 /** Preferred canonical variant of a word (or "" if none). */

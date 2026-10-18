@@ -36,7 +36,19 @@ function findPackageRoot(start: string): string {
 }
 
 const ROOT = findPackageRoot(dirname(fileURLToPath(import.meta.url)));
-const DEFAULT_PATH = join(ROOT, "data", "nst-lexicon.jsonl.gz");
+
+/** The full NST lexicon (source of truth for comparisons). */
+export const FULL_LEXICON_PATH = join(ROOT, "data", "nst-lexicon.jsonl.gz");
+/** Production lexicon: only the rows rules cannot reproduce. */
+export const PRUNED_LEXICON_PATH = join(ROOT, "data", "nst-lexicon.pruned.jsonl.gz");
+/**
+ * Words the rules reproduce: routed to the rule layer (skipping morphology), with
+ * an optional structure correction for the ones whose syllable/stress layout the
+ * rules do not match.
+ */
+export const RULE_INDEX_PATH = join(ROOT, "data", "nst-rules.jsonl.gz");
+
+const DEFAULT_PATH = FULL_LEXICON_PATH;
 
 interface RawRecord {
   w: string;
@@ -79,15 +91,96 @@ export function parseLexicon(gz: Buffer): Lexicon {
 }
 
 let cached: Lexicon | null = null;
+let cachedFull: Lexicon | null = null;
+let cachedRules: RuleIndex | null = null;
 
-/** Load the default lexicon (cached). */
-export function lexicon(): Lexicon {
-  if (cached) return cached;
+/**
+ * Load the full NST lexicon (cached). This is the comparison baseline: every
+ * pruning/rule change is scored against it, so it must never be pruned itself.
+ */
+export function fullLexicon(): Lexicon {
+  if (cachedFull) return cachedFull;
   if (!existsSync(DEFAULT_PATH)) {
     throw new Error(
       `lexicon not found at ${DEFAULT_PATH}; run: npm run build:lexicon`,
     );
   }
-  cached = parseLexicon(readFileSync(DEFAULT_PATH));
+  cachedFull = parseLexicon(readFileSync(DEFAULT_PATH));
+  return cachedFull;
+}
+
+/**
+ * Load the production lexicon (cached): the pruned lexicon when it has been
+ * built, otherwise the full lexicon. Words pruned from it are routed to the rules
+ * by the rule index.
+ */
+export function lexicon(): Lexicon {
+  if (cached) return cached;
+  const path = existsSync(PRUNED_LEXICON_PATH) ? PRUNED_LEXICON_PATH : DEFAULT_PATH;
+  if (!existsSync(path)) {
+    throw new Error(
+      `lexicon not found at ${path}; run: npm run build:lexicon`,
+    );
+  }
+  cached = parseLexicon(readFileSync(path));
   return cached;
+}
+
+/**
+ * An entry in the rule index: a word whose *phonemes* the rules already reproduce.
+ * It is routed to the rule layer, and `prefixes` restores NST's structure when the
+ * rules lay out syllables/stress/compounds differently. Matched words carry an
+ * empty `prefixes` (routing only).
+ */
+export interface RuleEntry {
+  /**
+   * `[phonemeIndex, prefix]` pairs, where `prefix` is the run of structure tokens
+   * (`$`, `"`, `""`, `%`, `¤`, `_`) that precede that phoneme in NST.
+   */
+  prefixes: Array<[number, string]>;
+}
+
+export interface RuleIndex {
+  lookup(word: string): RuleEntry | null;
+  readonly size: number;
+}
+
+interface RawRuleRecord {
+  w: string;
+  prefixes: Array<[number, string]>;
+}
+
+const EMPTY_RULE_INDEX: RuleIndex = {
+  lookup: () => null,
+  get size() {
+    return 0;
+  },
+};
+
+/** Parse a gzipped JSON-lines rule index. */
+export function parseRuleIndex(gz: Buffer): RuleIndex {
+  const text = gunzipSync(gz).toString("utf8");
+  const map = new Map<string, RuleEntry>();
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    const rec = JSON.parse(line) as RawRuleRecord;
+    map.set(rec.w, { prefixes: rec.prefixes });
+  }
+  return {
+    lookup: (word) => map.get(word.toLowerCase()) ?? null,
+    get size() {
+      return map.size;
+    },
+  };
+}
+
+/** Load the rule index (cached); empty when it has not been built. */
+export function ruleIndex(): RuleIndex {
+  if (cachedRules) return cachedRules;
+  if (!existsSync(RULE_INDEX_PATH)) {
+    cachedRules = EMPTY_RULE_INDEX;
+    return cachedRules;
+  }
+  cachedRules = parseRuleIndex(readFileSync(RULE_INDEX_PATH));
+  return cachedRules;
 }

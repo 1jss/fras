@@ -50,6 +50,8 @@ node src/cli.ts lexicon kärlek        # raw NST entry
 ```sh
 npm install
 npm run build:lexicon   # swe030224NST.pron -> data/nst-lexicon.jsonl.gz (~7 MB)
+npm run prune           # rule coverage over the full lexicon (dry run)
+npm run prune:write     # emit pruned lexicon + rule index + coverage report
 npm test
 npm run typecheck
 npm run eval            # rule-only accuracy against NST
@@ -61,15 +63,37 @@ runs the rule-only path and compares it with NST's own transcriptions (ignoring
 stress and boundaries). It is also the training/validation set for the eventual
 learned/compressed model.
 
+`npm run prune` turns that into a production split. For every NST headword it asks
+whether the rules already reproduce NST's phonemes; if so the row no longer needs to
+be stored and the rules generalize instead. Rows whose phonemes match but whose
+syllable/stress/compound layout does not get a tiny correction that restores NST's
+structure (no phonemes stored). `prune:write` emits:
+
+- `data/nst-lexicon.pruned.jsonl.gz` — the **production** lexicon (only rows rules
+  cannot reproduce), loaded by `lexicon()`;
+- `data/nst-rules.jsonl.gz` — the **rule index**: words the rules cover and which are
+  therefore routed straight to the rules (skipping morphology), with an optional
+  structure correction;
+- `data/rule-coverage.jsonl.gz` — per-word classification/divergence, the input for
+  automating rule search.
+
+Routing matters: without it the morphology fallback would split almost any removed
+row and produce a different pronunciation. The rule index makes rule-covered words
+take the rule path deterministically, so they are independent of every other prune.
+
+`prune:write` re-verifies the written artifacts against NST end to end (`--check`
+does the same on demand). The full `data/nst-lexicon.jsonl.gz` stays committed as the
+comparison baseline, so rule changes are always re-scored against it.
+
 ## Pipeline
 
 ```
 text ─▶ tokenize
         ├─ override table            (highest priority)
-        ├─ NST lexicon               (all variants preserved)
+        ├─ NST lexicon               (pruned; full kept as baseline)
+        ├─ rule index                (rule-covered -> rules, skip morphology)
         ├─ morphology                (compound split, suffix stripping)
         └─ generic rules             (grapheme -> NST SAMPA)
-     ─▶ stress assignment
      ─▶ NST SAMPA (canonical)
      ─▶ toVoiceIpa()  ─▶ `[[ … ]]` blocks  and/or  raw phoneme array
 ```
@@ -80,22 +104,25 @@ text ─▶ tokenize
 | --- | --- |
 | `src/sampa.ts` | NST SAMPA model: symbols, tokenizer, syllables |
 | `src/to-voice-ipa.ts` | NST SAMPA -> voice IPA adapter + profile |
-| `src/lexicon.ts` | loads `data/nst-lexicon.jsonl.gz` |
+| `src/lexicon.ts` | loads full/pruned lexicon + rule index |
 | `src/morphology.ts` | compound/suffix fallback |
 | `src/rules/` | rule engine + Swedish rules |
 | `src/phonetize.ts` | the pipeline + public API |
 | `src/annotate.ts` | `[[ …IPA… ]]` output for Piper |
 | `data/overrides.ts` | curated word overrides |
-| `tools/build-lexicon.ts` | build the compact lexicon |
+| `tools/build-lexicon.ts` | build the full compact lexicon |
+| `tools/prune-lexicon.ts` | rule-coverage audit + production prune |
 | `tools/eval.ts` | NST accuracy harness |
 | `tools/audit-voice.ts` | check emitted symbols against a voice |
 
 ## Status
 
-v1: lexicon + adapter + rules + morphology + eval. The rule layer is a **headstart**
-(currently ~20% exact on a 20k-word NST sample); the remaining error is mostly
-stress and loanword vowel length, which is the intended target for a learned model
-behind the same `G2P` seam.
+v1: lexicon + adapter + rules + morphology + eval + prune. The rule layer is a
+**headstart**: it reproduces NST's phonemes for ~20% of the lexicon today, and all of
+that is now pruned from the production lexicon and routed to the rules (2% match the
+full string; 18% need a small structure correction). The remaining 80% is mostly
+stress and loanword vowel length in the rules — the intended target for a learned
+model behind the same `G2P` seam.
 
 ## Data & attribution
 

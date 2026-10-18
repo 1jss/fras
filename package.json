@@ -20,6 +20,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "build:lexicon": "node tools/build-lexicon.ts",
+    "prune": "node tools/prune-lexicon.ts",
+    "prune:write": "node tools/prune-lexicon.ts --write --all",
     "eval": "node tools/eval.ts",
     "audit": "node tools/audit-voice.ts",
     "typecheck": "tsc --noEmit",

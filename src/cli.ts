@@ -10,7 +10,7 @@
  */
 
 import { annotate } from "./annotate.ts";
-import { lexicon } from "./lexicon.ts";
+import { fullLexicon } from "./lexicon.ts";
 import { phonetizeWord, textToIpa } from "./phonetize.ts";
 import { toVoiceIpa } from "./to-voice-ipa.ts";
 
@@ -52,7 +52,7 @@ function main(): void {
   }
 
   if (command === "lexicon") {
-    const lex = lexicon();
+    const lex = fullLexicon();
     for (const word of rest) {
       const entry = lex.lookup(word);
       process.stdout.write(`${word}\t${entry ? entry.variants.join(" | ") : "(not found)"}\n`);

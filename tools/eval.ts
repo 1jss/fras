@@ -15,7 +15,7 @@
  *   node tools/eval.ts [--n 20000] [--all] [--examples 25]
  */
 
-import { lexicon } from "../src/lexicon.ts";
+import { fullLexicon } from "../src/lexicon.ts";
 import { phonetizeWord } from "../src/phonetize.ts";
 import { parseNst } from "../src/sampa.ts";
 
@@ -55,7 +55,8 @@ function parseArgs(argv: string[]) {
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
-  const lex = lexicon();
+  // Score against the full lexicon, not the pruned production one.
+  const lex = fullLexicon();
   const all = [...lex.keys()].filter((k) => /^[a-zåäö]+$/.test(k));
   const stride = args.all ? 1 : Math.max(1, Math.floor(all.length / args.n));
   const sample = args.all ? all : all.filter((_, i) => i % stride === 0);
@@ -70,7 +71,13 @@ function main(): void {
     const entry = lex.lookup(word);
     if (!entry) continue;
     checked += 1;
-    const produced = segments(phonetizeWord(word, { lexicon: null, morphology: false, overrides: false }).variants[0] ?? "");
+    const produced = segments(
+      phonetizeWord(word, {
+        lexicon: null,
+        morphology: false,
+        overrides: false,
+      }).variants[0] ?? "",
+    );
     let best = Infinity;
     let bestVariant = "";
     for (const v of entry.variants) {
