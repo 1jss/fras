@@ -133,20 +133,21 @@ compact table (`data/flex-frequency.tsv.gz`) restricted to merged-lexicon headwo
 `npm run frequency:report` prints the dropoff — rows surviving each threshold and the
 Swedish token coverage they carry — which is how the cutoff was chosen.
 
-The committed policy is `--min-freq 0.01 --full-words-only`:
+The committed policy is `--min-freq 0.03 --full-words-only`:
 
 | layer | rows | share of all Flex tokens |
 | --- | --- | --- |
 | rule index (rules reproduce them) | 209,443 | ~37.7% |
-| production lexicon (stored) | 330,860 | ~54.0% |
-| dropped long tail | 639,300 | ~0.02% |
+| production lexicon (stored) | 263,159 | ~53.94% |
+| dropped long tail | 707,001 | ~0.06% |
 
-Dropping the long tail takes the stored list from 970k to 331k rows (~8 MB → 3.1 MB gz)
-and loses 512 of ~2.99M per-million tokens the stored rows used to provide — 0.02% of
-their coverage. The distribution is a textbook Zipf tail: 523k candidate rows never
-appear in Flex at all, and the elbow sits around 20k–35k rows (≈ `>= 1` per million).
-`--full-words-only` additionally drops rows the tokenizer can never reach (hyphenated,
-underscore-joined, affix and abbreviation entries), independent of frequency.
+Dropping the long tail takes the stored list from 970k to 263k rows (~8 MB → 2.4 MB gz)
+and loses 1,728 of ~2.99M per-million tokens the stored rows used to provide — 0.06% of
+all tokens, 0.11% of the stored rows' coverage. The distribution is a textbook Zipf
+tail: 523k candidate rows never appear in Flex at all, and the curve flattens sharply
+after ~50k rows. `--full-words-only` additionally drops rows the tokenizer can never
+reach (hyphenated, underscore-joined, affix and abbreviation entries), independent of
+frequency.
 
 Rule coverage is lower than it was against NST (18% vs 29%): the rules were iterated
 against NST, and Braxen's transcriptions differ (schwa `@`, `ae`/`oe` vowels, more
@@ -256,7 +257,7 @@ remaining ~82% is mostly stress, schwa and loanword vowel length in the rules �
 intended target for a learned model behind the same `G2P` seam.
 
 The production lexicon is additionally cut to the common core by usage
-(`--min-freq 0.01 --full-words-only`): 970k stored rows → 331k, keeping ~99.97% of
+(`--min-freq 0.03 --full-words-only`): 970k stored rows → 263k, keeping ~99.89% of
 the token coverage those rows provided. See *Usage-based pruning* above.
 
 ## Data & attribution
