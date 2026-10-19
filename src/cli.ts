@@ -4,7 +4,8 @@
  *
  *   fras "Hej på dig"          # IPA (voice alphabet)
  *   fras ipa "Hej på dig"      # same
- *   fras annotate "Hej på dig" # [[ …IPA… ]] blocks for Piper
+ *   fras annotate "Hej på dig" # [[ …IPA… ]] blocks for Piper (per word)
+ *   fras piper "Hej 12!"       # one [[ …IPA… ]] block for Piper (numbers spelled)
  *   fras word kärlek bilen     # per-word detail + provenance
  *   fras lexicon kärlek        # raw lexicon entry
  */
@@ -12,11 +13,12 @@
 import { annotate } from "./annotate.ts";
 import { fullLexicon } from "./lexicon.ts";
 import { phonetizeWord, textToIpa } from "./phonetize.ts";
+import { piperBlocks } from "./piper.ts";
 import { toVoiceIpa } from "./to-voice-ipa.ts";
 
 function usage(): void {
   process.stderr.write(
-    'usage: fras [ipa|annotate|word|lexicon] "text"\n',
+    'usage: fras [ipa|annotate|piper|word|lexicon] "text"\n',
   );
 }
 
@@ -36,6 +38,12 @@ function main(): void {
     const result = annotate(input);
     process.stdout.write(`${result.text}\n`);
     process.stderr.write(`hits ${result.hits}, misses ${result.misses}\n`);
+    return;
+  }
+
+  if (command === "piper") {
+    const input = rest.join(" ").trim();
+    process.stdout.write(`${piperBlocks(input)}\n`);
     return;
   }
 

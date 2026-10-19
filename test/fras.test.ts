@@ -13,8 +13,16 @@ import {
   type Lexicon,
   type LexiconEntry,
 } from "../src/lexicon.ts";
+import {
+  isFullWord,
+  parseFrequency,
+  pruneDecision,
+  serializeFrequency,
+} from "../src/frequency.ts";
 import { morphological } from "../src/morphology.ts";
 import { annotate } from "../src/annotate.ts";
+import { normalizeText, spellNumber } from "../src/normalize.ts";
+import { piperBlocks, piperPhonemes } from "../src/piper.ts";
 import {
   applyStructureCorrection,
   phonemeSequence,
@@ -179,4 +187,79 @@ test("parseRuleIndex reads gzipped rule-covered words", () => {
   assert.deepEqual(index.lookup("GATA")!.prefixes, [[2, '$"']]);
   assert.deepEqual(index.lookup("hej")!.prefixes, []);
   assert.equal(index.lookup("nope"), null);
+});
+
+test("spellNumber renders Swedish cardinals", () => {
+  assert.equal(spellNumber(0), "noll");
+  assert.equal(spellNumber(21), "tjugoett");
+  assert.equal(spellNumber(1001), "ettusenett");
+  assert.equal(spellNumber(2003), "tvåtusentre");
+  assert.equal(spellNumber(46500), "fyrtiosextusen femhundra");
+  assert.equal(spellNumber(603550), "sexhundratretusen femhundrafemtio");
+  assert.equal(spellNumber(1500000), "en miljon femhundratusen");
+});
+
+test("normalizeText spells numbers and expands abbreviations", () => {
+  assert.equal(normalizeText("kapitel 1."), "kapitel ett.");
+  assert.equal(normalizeText("46 500 man"), "fyrtiosextusen femhundra man");
+  assert.equal(normalizeText("3,5"), "tre komma fem");
+  assert.equal(normalizeText("t.ex. 12"), "till exempel tolv");
+  assert.equal(normalizeText("50%"), "femtio procent");
+});
+
+test("piperBlocks wraps a fully phonetized utterance in one block", () => {
+  const block = piperBlocks("Hej!");
+  assert.equal(block, "[[ˈhɛj!]]");
+});
+
+test("piperPhonemes spells out numbers and drops unmapped punctuation", () => {
+  const phonemes = piperPhonemes("”Kapitel 46 500!”");
+  assert.ok(phonemes.startsWith("ka"), phonemes);
+  assert.ok(!phonemes.includes("46500"), phonemes);
+  assert.ok(!/\d/.test(phonemes), phonemes);
+  assert.ok(!phonemes.includes("\u201d"), phonemes);
+  assert.ok(phonemes.endsWith("!"), phonemes);
+});
+
+test("piperBlocks is empty when there is nothing speakable", () => {
+  assert.equal(piperBlocks("”«»"), "");
+});
+
+test("frequency table round-trips through gzip", () => {
+  const gz = serializeFrequency([
+    ["katt", 12.5],
+    ["hund", 0.25],
+    ["ö", 0.00123456],
+  ]);
+  const table = parseFrequency(gz);
+  assert.equal(table.size, 3);
+  assert.equal(table.frequency("KATT"), 12.5);
+  assert.equal(table.frequency("hund"), 0.25);
+  // Six significant digits are preserved.
+  assert.equal(table.frequency("ö").toPrecision(6), "0.00123456");
+  assert.equal(table.frequency("saknas"), 0);
+  assert.ok(Math.abs(table.mass - (12.5 + 0.25 + 0.00123456)) < 1e-9);
+});
+
+test("isFullWord accepts only strings the tokenizer emits as one word", () => {
+  assert.equal(isFullWord("katt"), true);
+  assert.equal(isFullWord("abbé"), true); // accented loanword
+  assert.equal(isFullWord("a-kassa"), false); // hyphen splits
+  assert.equal(isFullWord("a_capella"), false); // underscore splits
+  assert.equal(isFullWord("aero-"), false); // NST prefix
+  assert.equal(isFullWord("-del"), false); // NST suffix
+  assert.equal(isFullWord("a4"), false); // digit splits
+  assert.equal(isFullWord("&"), false);
+});
+
+test("pruneDecision drops non-words and the low-frequency tail", () => {
+  const freq = parseFrequency(serializeFrequency([["katt", 12.5], ["sällsynt", 0.002]]));
+  const policy = { minFreq: 0.01, fullWordsOnly: true };
+  assert.equal(pruneDecision("katt", freq, policy), "keep");
+  assert.equal(pruneDecision("sällsynt", freq, policy), "low-freq");
+  assert.equal(pruneDecision("a-kassa", freq, policy), "non-word");
+  // A non-word is dropped before the frequency check is consulted.
+  assert.equal(pruneDecision("a-kassa", null, { minFreq: 1, fullWordsOnly: true }), "non-word");
+  // Frequency pruning is off by default, so everything reachable is kept.
+  assert.equal(pruneDecision("sällsynt", freq, { minFreq: 0, fullWordsOnly: false }), "keep");
 });

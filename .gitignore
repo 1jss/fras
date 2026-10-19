@@ -3,6 +3,9 @@ dist/
 *.log
 .DS_Store
 
+# Downloaded Flex archive / unpacked CSV (rebuild with: npm run frequency)
+data/.cache/
+
 # Large upstream source data (185 MB) -- kept locally, not in git history
 swe030224NST.pron
 

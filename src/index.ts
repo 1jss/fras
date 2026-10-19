@@ -72,3 +72,5 @@ export {
   defaultG2P,
 } from "./phonetize.ts";
 export { annotate, type AnnotateResult } from "./annotate.ts";
+export { normalizeText, spellNumber } from "./normalize.ts";
+export { piperPhonemes, piperBlocks, preload } from "./piper.ts";

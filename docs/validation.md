@@ -5,6 +5,10 @@ but only the symbols that appeared in a voice's training corpus are actually
 voiced. fras targets the **pre-espeak-ng-PR#2364** Swedish inventory, which is
 what the voices learned.
 
+Consumers hand these phonemes to Piper as one raw-phoneme block
+(`piperBlocks()`, see the README), so espeak-ng never phonetizes; the audit below
+guarantees nothing is silently dropped at synthesis time.
+
 ## Static check (no Piper needed)
 
 ```sh

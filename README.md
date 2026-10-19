@@ -29,10 +29,11 @@ Everything else is calibrated against the voices' own espeak-ng output and
 ## Usage
 
 ```ts
-import { textToIpa, annotate, phonetizeWord } from "fras";
+import { textToIpa, annotate, phonetizeWord, piperBlocks } from "fras";
 
 textToIpa("Hej på dig!");       // "ˈhɛj ˈpoː ˈdɛj!"  (voice IPA)
-annotate("Hej på dig!").text;   // "[[ˈhɛj]] [[ˈpoː]] [[ˈdɛj]]!"  (Piper blocks)
+annotate("Hej på dig!").text;   // "[[ˈhɛj]] [[ˈpoː]] [[ˈdɛj]]!"  (per-word blocks)
+piperBlocks("Kapitel 12, 46 500."); // "[[kaˈpɪtɛl ˈtɔlv, …]]" (one block, numbers spelled)
 phonetizeWord("kärlek");        // { variants: ['""s\'E:$%l`e:k'], source: "lexicon" }
 ```
 
@@ -40,10 +41,17 @@ CLI:
 
 ```sh
 node src/cli.ts "Hej på dig"          # IPA
-node src/cli.ts annotate "Hej på dig" # [[ …IPA… ]] for Piper
+node src/cli.ts annotate "Hej på dig" # [[ …IPA… ]] per word
+node src/cli.ts piper "Hej 12!"       # one [[ …IPA… ]] block (espeak-free handoff)
 node src/cli.ts word kärlek bilen     # per-word detail + provenance
 node src/cli.ts lexicon kärlek        # raw NST entry
 ```
+
+`piperBlocks()` phonetizes the **whole** utterance with fras and returns it as a
+single Piper raw-phoneme block, so Piper's embedded espeak-ng never phonetizes
+anything. Numbers and common abbreviations are spelled out first
+(`normalizeText`) and typographic punctuation is mapped to symbols the voices'
+`phoneme_id_map` contains.
 
 ## Build, test, evaluate
 
@@ -52,6 +60,8 @@ npm install
 npm run build:lexicon   # swe030224NST.pron -> data/nst-lexicon.jsonl.gz (~7 MB)
 npm run prune           # rule coverage over the full lexicon (dry run)
 npm run prune:write     # emit pruned lexicon + rule index + coverage report
+npm run frequency       # fetch Flex -> data/flex-frequency.tsv.gz (usage statistics)
+npm run frequency:report # long-tail dropoff stats for the --min-freq cutoff
 npm test
 npm run typecheck
 npm run eval            # rule-only accuracy against NST
@@ -85,6 +95,34 @@ take the rule path deterministically, so they are independent of every other pru
 does the same on demand). The full `data/nst-lexicon.jsonl.gz` stays committed as the
 comparison baseline, so rule changes are always re-scored against it.
 
+### Usage-based pruning
+
+Rule coverage says whether a row *can* be replaced; frequency says whether it is
+worth keeping at all. `npm run frequency` downloads Språkbanken's **Flex** frequency
+lexicon (CC-BY-4.0), sums the novel/newspaper/forum per-million rates, and commits a
+compact table (`data/flex-frequency.tsv.gz`) restricted to NST headwords.
+`npm run frequency:report` prints the dropoff — rows surviving each threshold and the
+Swedish token coverage they carry — which is how the cutoff was chosen.
+
+The committed policy is `--min-freq 0.01 --full-words-only`:
+
+| layer | rows | share of all Flex tokens |
+| --- | --- | --- |
+| rule index (rules reproduce them) | 234,454 | ~56.6% |
+| production lexicon (stored) | 199,031 | ~23.87% |
+| dropped long tail | 385,464 | ~0.009% |
+
+Dropping the long tail takes the stored list from 584k to 199k rows (5.1 MB → 2.1 MB
+gz) and loses 282 of ~713k per-million tokens the stored rows used to provide — 0.04%
+of their coverage. The distribution is a textbook Zipf tail: 318k candidate rows never
+appear in Flex at all, and the elbow sits around 20k–35k rows (≈ `>= 1` per million).
+`--full-words-only` additionally drops rows the tokenizer can never reach (hyphenated,
+underscore-joined, affix and abbreviation entries), independent of frequency.
+
+Words dropped this way fall through to morphology → generic rules and may diverge
+from NST; that is acceptable precisely because they are rare. `verifyProduction()`
+therefore only requires **rule-index** words to reproduce NST.
+
 ## Pipeline
 
 ```
@@ -96,6 +134,9 @@ text ─▶ tokenize
         └─ generic rules             (grapheme -> NST SAMPA)
      ─▶ NST SAMPA (canonical)
      ─▶ toVoiceIpa()  ─▶ `[[ … ]]` blocks  and/or  raw phoneme array
+
+`piperBlocks()` is the espeak-free path: it spells out numbers, phonetizes every
+word and returns the whole utterance as one `[[ …IPA… ]]` block.
 ```
 
 ## Layout
@@ -105,13 +146,18 @@ text ─▶ tokenize
 | `src/sampa.ts` | NST SAMPA model: symbols, tokenizer, syllables |
 | `src/to-voice-ipa.ts` | NST SAMPA -> voice IPA adapter + profile |
 | `src/lexicon.ts` | loads full/pruned lexicon + rule index |
+| `src/frequency.ts` | Flex frequency table + usage-prune policy |
 | `src/morphology.ts` | compound/suffix fallback |
 | `src/rules/` | rule engine + Swedish rules |
 | `src/phonetize.ts` | the pipeline + public API |
-| `src/annotate.ts` | `[[ …IPA… ]]` output for Piper |
+| `src/annotate.ts` | `[[ …IPA… ]]` output for Piper (per word) |
+| `src/normalize.ts` | numbers/abbreviations -> words (`spellNumber`, `normalizeText`) |
+| `src/piper.ts` | espeak-free Piper handoff (`piperPhonemes`, `piperBlocks`, `preload`) |
 | `data/overrides.ts` | curated word overrides |
 | `tools/build-lexicon.ts` | build the full compact lexicon |
-| `tools/prune-lexicon.ts` | rule-coverage audit + production prune |
+| `tools/build-frequency.ts` | fetch Flex → compact frequency table |
+| `tools/frequency-report.ts` | long-tail dropoff statistics |
+| `tools/prune-lexicon.ts` | rule-coverage audit + production prune (rules + frequency) |
 | `tools/eval.ts` | NST accuracy harness |
 | `tools/audit-voice.ts` | check emitted symbols against a voice |
 
@@ -124,9 +170,15 @@ full string; 26% need a small structure correction). The remaining ~71% is mostl
 stress and loanword vowel length in the rules — the intended target for a learned
 model behind the same `G2P` seam.
 
+The production lexicon is additionally cut to the common core by usage
+(`--min-freq 0.01 --full-words-only`): 584k stored rows → 199k, keeping ~99.96% of
+the token coverage those rows provided. See *Usage-based pruning* above.
+
 ## Data & attribution
 
 - NST Swedish pronunciation lexicon (`swe030224NST.pron`).
+- Flex frequency lexicon — Språkbanken, [CC-BY-4.0](https://sprakbanken.se/resurser/flex)
+  (usage statistics for the frequency prune; `data/flex-frequency.tsv.gz`).
 - `nst-xsampa.sym` — Wikispeech, CC0.
 - espeak-ng `dictsource/sv_rules`, `sv_list` — GPL-3.0 (used as a reference for the
   rule layer only; no code is copied).

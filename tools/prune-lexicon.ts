@@ -20,6 +20,13 @@
  * past morphology is what makes them prunable: without it, morphology splits almost
  * any row that is removed.
  *
+ * Usage-based prune (optional): `--min-freq X` drops rows whose Flex frequency
+ * (per million; see `tools/build-frequency.ts`) is below X, and
+ * `--full-words-only` drops rows the tokenizer can never reach (hyphen/underscore/
+ * affix/abbreviation entries). Both apply only to the stored-pronunciation rows;
+ * rule-covered words are always routed to the rules. See `tools/frequency-report.ts`
+ * for the dropoff statistics that inform X.
+ *
  * `--write` emits:
  *   - `data/nst-lexicon.pruned.jsonl.gz`  pronunciations the rules cannot produce
  *   - `data/nst-rules.jsonl.gz`           rule-covered words (+ structure correction)
@@ -29,6 +36,7 @@
  *
  * Usage:
  *   node tools/prune-lexicon.ts [--write] [--check] [--all|--n N]
+ *                               [--min-freq X] [--full-words-only]
  *                               [--examples N] [--report PATH]
  */
 
@@ -40,11 +48,13 @@ import { gzipSync } from "node:zlib";
 import {
   fullLexicon,
   parseLexicon,
+  ruleIndex,
   FULL_LEXICON_PATH,
   PRUNED_LEXICON_PATH,
   RULE_INDEX_PATH,
   type Lexicon,
 } from "../src/lexicon.ts";
+import { parseFrequency, pruneDecision, type FrequencyTable } from "../src/frequency.ts";
 import { applyStructureCorrection, phonemeSequence, phonetizeWord } from "../src/phonetize.ts";
 import { applyRules, applyRulesTrace } from "../src/rules/engine.ts";
 import { SV_RULES_COMPILED } from "../src/rules/sv-rules.ts";
@@ -53,6 +63,7 @@ import { parseNst } from "../src/sampa.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const COVERAGE_PATH = join(ROOT, "data", "rule-coverage.jsonl.gz");
+const FREQ_PATH = join(ROOT, "data", "flex-frequency.tsv.gz");
 
 type Status = "matched" | "structure-only" | "miss";
 
@@ -73,12 +84,23 @@ interface CoverageRecord {
 }
 
 function parseArgs(argv: string[]) {
-  const args = { write: false, check: false, all: false, n: 20000, examples: 20, report: "" };
+  const args = {
+    write: false,
+    check: false,
+    all: false,
+    n: 20000,
+    examples: 20,
+    report: "",
+    minFreq: 0,
+    fullWords: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--write") args.write = true;
     else if (a === "--check") args.check = true;
     else if (a === "--all") args.all = true;
+    else if (a === "--full-words-only") args.fullWords = true;
+    else if (a === "--min-freq") args.minFreq = Number(argv[++i]);
     else if (a === "--n") args.n = Number(argv[++i]);
     else if (a === "--examples") args.examples = Number(argv[++i]);
     else if (a === "--report") args.report = argv[++i] ?? "";
@@ -294,13 +316,40 @@ async function main(): Promise<void> {
           "use --all (npm run prune:write) for production artifacts\n",
       );
     }
+
+    let freq: FrequencyTable | null = null;
+    if (args.minFreq > 0) {
+      if (!existsSync(FREQ_PATH)) {
+        process.stderr.write(
+          `error: --min-freq needs ${FREQ_PATH}; run: npm run frequency\n`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      freq = parseFrequency(readFileSync(FREQ_PATH));
+    }
+
     const pruned: string[] = [];
     const ruleLines: string[] = [];
+    let droppedLowFreq = 0;
+    let droppedNonWord = 0;
+    let droppedMass = 0;
+    const policy = { minFreq: args.minFreq, fullWordsOnly: args.fullWords };
     for (const w of full.keys()) {
       const e = full.lookup(w);
       if (!e) continue;
       if (covered.has(w)) {
         ruleLines.push(JSON.stringify({ w, prefixes: covered.get(w) ?? [] }));
+        continue;
+      }
+      const decision = pruneDecision(w, freq, policy);
+      if (decision === "non-word") {
+        droppedNonWord += 1;
+        continue;
+      }
+      if (decision === "low-freq") {
+        droppedLowFreq += 1;
+        droppedMass += freq?.frequency(w) ?? 0;
         continue;
       }
       const rec: { w: string; v: string[]; s?: string } = { w, v: e.variants };
@@ -310,27 +359,45 @@ async function main(): Promise<void> {
     writeFileSync(PRUNED_LEXICON_PATH, gzipSync(Buffer.from(pruned.join("\n") + "\n"), { level: 9 }));
     writeFileSync(RULE_INDEX_PATH, gzipSync(Buffer.from(ruleLines.join("\n") + "\n"), { level: 9 }));
     writeFileSync(COVERAGE_PATH, gzipSync(Buffer.from(coverageText()), { level: 9 }));
+    const dropped = droppedLowFreq + droppedNonWord;
     process.stdout.write(
       `\nwrote ${PRUNED_LEXICON_PATH} (${pruned.length} rows)\n` +
         `wrote ${RULE_INDEX_PATH} (${ruleLines.length} rows)\n` +
         `wrote ${COVERAGE_PATH} (${coverage.length} rows)\n` +
         `full baseline kept at ${FULL_LEXICON_PATH}\n`,
     );
+    if (args.minFreq > 0 || args.fullWords) {
+      process.stdout.write(
+        `frequency/shape prune: dropped ${dropped} rows` +
+          `${args.fullWords ? ` (${droppedNonWord} non-word)` : ""}` +
+          `${args.minFreq > 0 ? ` (${droppedLowFreq} below ${args.minFreq}/M)` : ""}` +
+          `; token mass lost ${droppedMass.toFixed(0)} per-million\n`,
+      );
+    }
   }
 
   if (args.check || args.write) verifyProduction();
 }
 
-/** Verify the committed production artifacts (pruned lexicon + rule index) vs NST. */
+/**
+ * Verify the committed production artifacts (pruned lexicon + rule index) vs NST.
+ *
+ * Only rule-index words are checked: their invariant is that the rule layer
+ * reproduces NST (with the stored structure correction). Words dropped from the
+ * lexicon by the frequency/shape prune are *expected* to fall through to
+ * morphology/generic rules and may diverge, so they are not regressions.
+ */
 function verifyProduction(): void {
   const full = fullLexicon();
   const prod: Lexicon = existsSync(PRUNED_LEXICON_PATH)
     ? parseLexicon(readFileSync(PRUNED_LEXICON_PATH))
     : full;
+  const rules = ruleIndex();
   const regressions: string[] = [];
   let checked = 0;
   for (const w of full.keys()) {
     if (prod.lookup(w)) continue; // pronunciation stored; resolution is a lookup
+    if (!rules.lookup(w)) continue; // frequency/shape-dropped; divergence is allowed
     const e = full.lookup(w);
     if (!e) continue;
     checked += 1;
