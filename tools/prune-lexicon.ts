@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Rule-coverage automation over the full NST lexicon.
+ * Rule-coverage automation over the merged (Braxen-first) lexicon.
  *
- * For every headword in `data/nst-lexicon.jsonl.gz`, run the **rule-only** path and
+ * For every headword in the merged `data/lexicon.jsonl.gz`, run the **rule-only** path and
  * compare its phonemes with NST's own transcriptions. A row the rules already
  * reproduce is a "direct replacement" we no longer need to store: the row moves to
  * the rule index, so in production the rules produce it (generalizing instead of
@@ -28,11 +28,11 @@
  * for the dropoff statistics that inform X.
  *
  * `--write` emits:
- *   - `data/nst-lexicon.pruned.jsonl.gz`  pronunciations the rules cannot produce
- *   - `data/nst-rules.jsonl.gz`           rule-covered words (+ structure correction)
+ *   - `data/lexicon.pruned.jsonl.gz`      pronunciations the rules cannot produce
+ *   - `data/rules.jsonl.gz`               rule-covered words (+ structure correction)
  *   - `data/rule-coverage.jsonl.gz`       per-word classification report
  *
- * and then verifies the written artifacts against NST end to end.
+ * and then verifies the written artifacts against the merged lexicon end to end.
  *
  * Usage:
  *   node tools/prune-lexicon.ts [--write] [--check] [--all|--n N]
@@ -205,6 +205,14 @@ function classify(word: string, variants: string[]): Classification {
     };
   }
 
+  const prefixes = structurePrefixes(target);
+  if (prefixes.length === 0) {
+    // The rules add structure the target does not have (e.g. Braxen leaves
+    // interjections such as `pst` unstressed) and there is nothing to re-emit:
+    // the correction cannot express "remove all structure", so store the row.
+    return { status: "miss", record: missRecord(word, variants, ruleSegments), prefixes: [] };
+  }
+
   return {
     status: "structure-only",
     record: {
@@ -214,7 +222,7 @@ function classify(word: string, variants: string[]): Classification {
       status: "structure-only",
       divergence: null,
     },
-    prefixes: structurePrefixes(target),
+    prefixes,
   };
 }
 
@@ -264,7 +272,7 @@ async function main(): Promise<void> {
   const total = matched + structureOnly + miss;
   const prunable = matched + structureOnly;
   process.stdout.write(
-    `rule coverage over NST lexicon${args.all ? "" : ` (sampled ${total})`}\n` +
+    `rule coverage over merged lexicon${args.all ? "" : ` (sampled ${total})`}\n` +
       `  rule-covered    ${prunable} (${pct(prunable, total)})  -> route to rules, prune row\n` +
       `    matched         ${matched} (${pct(matched, total)})  full string matches\n` +
       `    structure-only  ${structureOnly} (${pct(structureOnly, total)})  + structure correction\n` +
@@ -396,7 +404,7 @@ function verifyProduction(): void {
     );
     process.exitCode = 1;
   } else {
-    process.stdout.write(`\ncheck OK: all ${checked} rule-routed words reproduce NST\n`);
+    process.stdout.write(`\ncheck OK: all ${checked} rule-routed words reproduce the lexicon\n`);
   }
 }
 

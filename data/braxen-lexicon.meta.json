@@ -1,0 +1,14 @@
+{
+  "source": "Braxen 1.0",
+  "url": "https://raw.githubusercontent.com/sprakbankental/braxen/main/dict/braxen-sv.tsv",
+  "license": "Apache-2.0",
+  "fetchedAt": "2026-10-19T19:08:43.694Z",
+  "language": "swe",
+  "rows": 857017,
+  "malformed": 1,
+  "swe": 774500,
+  "headwords": 684448,
+  "converted": 684448,
+  "mismatches": 0,
+  "sourceModified": null
+}

@@ -5,7 +5,7 @@
  * Source: Språkbanken's *Flex* frequency lexicon (CC-BY-4.0),
  * `https://spraakbanken.gu.se/resurser/data/flex.csv.zip` — one row per word with
  * per-million frequencies for novel, newspaper and forum. We sum the three corpora
- * and, by default, keep only headwords of the full NST lexicon so the committed
+ * and, by default, keep only headwords of the merged lexicon so the committed
  * table stays small (~388k rows, ~2.7 MB gz).
  *
  * Usage:
@@ -44,7 +44,7 @@ function parseArgs(argv: string[]) {
     freq: resolve(ROOT, "data/.cache/flex.csv"),
     out: resolve(ROOT, "data/flex-frequency.tsv.gz"),
     meta: resolve(ROOT, "data/flex-frequency.meta.json"),
-    lexicon: resolve(ROOT, "data/nst-lexicon.jsonl.gz"),
+    lexicon: resolve(ROOT, "data/lexicon.jsonl.gz"),
     force: false,
     all: false,
   };
@@ -180,7 +180,7 @@ async function main(): Promise<void> {
   process.stdout.write(
     `flex words           ${freq.size}\n` +
       `token mass (all)     ${totalMass.toFixed(0)}\n` +
-      `rows written         ${entries.length}${args.all ? "" : ` (NST headwords only)`}\n` +
+      `rows written         ${entries.length}${args.all ? "" : ` (lexicon headwords only)`}\n` +
       `wrote ${args.out} (${gz.length} bytes gz)\n` +
       `wrote ${args.meta}\n`,
   );

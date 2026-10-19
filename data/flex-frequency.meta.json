@@ -2,10 +2,9 @@
   "source": "Flex (Språkbanken)",
   "url": "https://spraakbanken.gu.se/resurser/data/flex.csv.zip",
   "license": "CC-BY-4.0",
-  "fetchedAt": "2026-10-18T16:59:19.187Z",
+  "fetchedAt": "2026-10-19T19:15:48.754Z",
   "totalMass": 2985041.701691403,
-  "rows": 387810,
+  "rows": 548832,
   "all": false,
-  "lexicon": "nst-lexicon.jsonl.gz",
-  "flexModified": "Mon, 08 Dec 2025 10:20:42 GMT"
+  "lexicon": "lexicon.jsonl.gz"
 }

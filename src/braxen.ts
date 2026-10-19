@@ -198,6 +198,146 @@ export function braxenToIpa(base: string, options: BraxenToIpaOptions = {}): str
 }
 
 /* -------------------------------------------------------------------------- *
+ * Braxen Base -> NST SAMPA (build-time)
+ *
+ * Used by `tools/build-braxen-lexicon.ts` so the runtime pipeline can keep its
+ * canonical NST SAMPA alphabet while sourcing pronunciations from Braxen. The
+ * table is chosen so the voice rendering is byte-identical to the auditioned
+ * `braxenVoiceIpa()`:
+ *
+ *   toVoiceIpa(braxenToNstSampa(base)) === braxenVoiceIpa(base)
+ *
+ * (verified over the whole Braxen source, 0 mismatches; the build tool asserts
+ * this invariant and aborts otherwise).
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Braxen Base symbol -> NST SAMPA. Multi-symbol values expand to several NST
+ * phonemes (`eu` -> `E*U`, `tc` -> `t` + `x\`, ...) so the Piper output matches.
+ */
+export const BRAXEN_BASE_TO_NST: Readonly<Record<string, string>> = {
+  // plosives / nasals
+  p: "p",
+  b: "b",
+  t: "t",
+  rt: "t`",
+  d: "d",
+  rd: "d`",
+  k: "k",
+  g: "g",
+  m: "m",
+  n: "n",
+  rn: "n`",
+  ng: "N",
+  // fricatives / affricates
+  f: "f",
+  v: "v",
+  s: "s",
+  rs: "s`",
+  sh: "x\\", // ʃ -> sje, the voice renders ʃ for `x\`
+  zh: "x\\",
+  z: "s",
+  dh: "d",
+  th: "t",
+  h: "h",
+  x: "x\\", // ɧ -> sje
+  xx: "k",
+  c: "s'",
+  tc: "tx\\", // t͡ʃ -> t + ʃ
+  dj: "dx\\", // d͡ʒ -> d + ʃ
+  // approximants / rhotics
+  r: "r",
+  l: "l",
+  rl: "l`",
+  j: "j",
+  w: "v",
+  rh: "r",
+  rx: "r",
+  // `r0`: no NST symbol; `parseBraxenBase` drops it.
+  // vowels
+  "i:": "i:",
+  i: "I",
+  ih: "I",
+  "y:": "y:",
+  y: "Y",
+  "e:": "e:",
+  e: "e",
+  eh: "e",
+  ex: "@",
+  "ä:": "E:",
+  "ä": "E",
+  "ae:": "E:",
+  ae: "E",
+  "ö:": "2:",
+  "ö": "9",
+  "oe:": "2:",
+  oe: "9",
+  "u:": "u:",
+  u: "U",
+  oh: "O",
+  "o:": "o:",
+  o: "O",
+  "uu:": "}:",
+  uu: "u0",
+  uuh: "}:",
+  "uw:": "U",
+  uw: "U",
+  "a:": "A:",
+  a: "a",
+  "aa:": "A:",
+  // diphthongs / nasal vowels (expansions preserve the voice rendering)
+  au: "a*U",
+  eu: "E*U", // ɛʊ collapses to voice eʊ, which NST spells E*U
+  ei: "eI",
+  ai: "aI",
+  oi: "OI",
+  ou: "@U",
+  eex: "e@",
+  iex: "I@",
+  uex: "U@",
+  an: "a",
+  en: "E",
+  on: "O",
+  un: "9",
+};
+
+const BRAXEN_STRESS_TO_NST: Readonly<Record<string, string>> = {
+  "'": '"', // accent I
+  '"': '""', // accent II
+  ",": "%", // secondary
+};
+
+const BRAXEN_BOUNDARY_TO_NST: Readonly<Record<string, string>> = {
+  ".": "$", // syllable
+  "-": "¤", // compound
+  "~": "_", // morpheme -> intra-word boundary
+  "|": "_", // word boundary
+};
+
+/**
+ * Render a Braxen Base transcription as canonical NST SAMPA.
+ *
+ * Stress is left where Braxen writes it (immediately before the nucleus):
+ * `toVoiceIpa()` buffers the mark to the next vowel, so relocating it to the
+ * syllable onset is unnecessary and one source row breaks when it is moved.
+ */
+export function braxenToNstSampa(base: string): string {
+  let out = "";
+  for (const t of parseBraxenBase(base)) {
+    if (t.type === "boundary") {
+      out += BRAXEN_BOUNDARY_TO_NST[t.symbol] ?? "";
+      continue;
+    }
+    if (t.type === "stress") {
+      out += BRAXEN_STRESS_TO_NST[t.symbol] ?? "";
+      continue;
+    }
+    out += BRAXEN_BASE_TO_NST[t.symbol] ?? t.symbol;
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------------------- *
  * NST SAMPA -> IPA (standard reference, independent of the voice profile)
  * -------------------------------------------------------------------------- */
 

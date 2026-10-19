@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Rule-quality evaluation against the NST lexicon.
+ * Rule-quality evaluation against the merged lexicon.
  *
  * Runs the **rule-only** path (lexicon, morphology and overrides disabled) over
- * NST words and compares the produced NST SAMPA segments with the lexicon's own
- * transcriptions. This is the metric that drives the "rules until they cover
- * NST" goal, and it is the natural training/validation set for a learned model
- * later.
+ * the merged (Braxen-first) words and compares the produced NST SAMPA segments
+ * with the lexicon's own transcriptions. This is the metric that drives the
+ * "rules until they cover the lexicon" goal, and it is the natural
+ * training/validation set for a learned model later.
  *
  * Comparison ignores stress marks, syllable (`$`), compound (`¤`) and
  * intra-word (`_`) boundaries, and reports the best of a word's variants.

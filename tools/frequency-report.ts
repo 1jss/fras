@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Frequency dropoff report: where the long tail of the NST lexicon starts.
+ * Frequency dropoff report: where the long tail of the merged lexicon starts.
  *
- * Loads the full NST lexicon, its rule-miss storage candidates and the Flex
+ * Loads the merged lexicon, its rule-miss storage candidates and the Flex
  * frequency table, then shows how much of the stored pronunciation list can be
  * dropped at each frequency threshold — and how much Swedish token coverage that
  * costs. The threshold table is the input for choosing `prune-lexicon.ts

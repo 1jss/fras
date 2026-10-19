@@ -1,5 +1,6 @@
 /**
- * Runtime access to the compact NST lexicon built by `tools/build-lexicon.ts`.
+ * Runtime access to the compact merged lexicon: Braxen-first pronunciations with
+ * the NST full-word fallback (`tools/build-braxen-lexicon.ts` + `tools/merge-lexicon.ts`).
  *
  * Records are gzipped JSON-lines: `{"w": headword, "v": [pronunciation], "s": seg?}`.
  * The committed build stores one preferred pronunciation per word; `--all-variants`
@@ -38,16 +39,20 @@ function findPackageRoot(start: string): string {
 
 const ROOT = findPackageRoot(dirname(fileURLToPath(import.meta.url)));
 
-/** The full NST lexicon (source of truth for comparisons). */
-export const FULL_LEXICON_PATH = join(ROOT, "data", "nst-lexicon.jsonl.gz");
+/** The merged full lexicon (Braxen-first + NST fallback; source of truth). */
+export const FULL_LEXICON_PATH = join(ROOT, "data", "lexicon.jsonl.gz");
+/** Frozen NST baseline (fallback source + regression reference). */
+export const NST_BASELINE_PATH = join(ROOT, "data", "nst-lexicon.jsonl.gz");
+/** The Braxen-derived lexicon built by `tools/build-braxen-lexicon.ts`. */
+export const BRAXEN_LEXICON_PATH = join(ROOT, "data", "braxen-lexicon.jsonl.gz");
 /** Production lexicon: only the rows rules cannot reproduce. */
-export const PRUNED_LEXICON_PATH = join(ROOT, "data", "nst-lexicon.pruned.jsonl.gz");
+export const PRUNED_LEXICON_PATH = join(ROOT, "data", "lexicon.pruned.jsonl.gz");
 /**
  * Words the rules reproduce: routed to the rule layer (skipping morphology), with
  * an optional structure correction for the ones whose syllable/stress layout the
  * rules do not match.
  */
-export const RULE_INDEX_PATH = join(ROOT, "data", "nst-rules.jsonl.gz");
+export const RULE_INDEX_PATH = join(ROOT, "data", "rules.jsonl.gz");
 
 const DEFAULT_PATH = FULL_LEXICON_PATH;
 
@@ -93,21 +98,38 @@ export function parseLexicon(gz: Buffer): Lexicon {
 
 let cached: Lexicon | null = null;
 let cachedFull: Lexicon | null = null;
+let cachedNst: Lexicon | null = null;
 let cachedRules: RuleIndex | null = null;
 
 /**
- * Load the full NST lexicon (cached). This is the comparison baseline: every
- * pruning/rule change is scored against it, so it must never be pruned itself.
+ * Load the merged full lexicon (cached): Braxen-first with the NST full-word
+ * fallback. This is the comparison baseline: every pruning/rule change is scored
+ * against it, so it must never be pruned itself.
  */
 export function fullLexicon(): Lexicon {
   if (cachedFull) return cachedFull;
   if (!existsSync(DEFAULT_PATH)) {
     throw new Error(
-      `lexicon not found at ${DEFAULT_PATH}; run: npm run build:lexicon`,
+      `lexicon not found at ${DEFAULT_PATH}; run: npm run build:braxen:lexicon && npm run merge:lexicon`,
     );
   }
   cachedFull = parseLexicon(readFileSync(DEFAULT_PATH));
   return cachedFull;
+}
+
+/**
+ * Load the frozen NST baseline (cached). Kept for the "no word lost" check and
+ * regression comparisons; the runtime pipeline does not use it.
+ */
+export function nstBaseline(): Lexicon {
+  if (cachedNst) return cachedNst;
+  if (!existsSync(NST_BASELINE_PATH)) {
+    throw new Error(
+      `NST baseline not found at ${NST_BASELINE_PATH}; run: npm run build:lexicon`,
+    );
+  }
+  cachedNst = parseLexicon(readFileSync(NST_BASELINE_PATH));
+  return cachedNst;
 }
 
 /**

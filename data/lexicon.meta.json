@@ -1,0 +1,11 @@
+{
+  "source": "Braxen 1.0 (preferred) + NST (full-word fallback)",
+  "generatedAt": "2026-10-19T19:09:18.444Z",
+  "braxenHeadwords": 684448,
+  "nstHeadwords": 818949,
+  "nstFullWords": 812354,
+  "overlap": 317199,
+  "nstFallback": 495155,
+  "merged": 1179603,
+  "lost": 0
+}

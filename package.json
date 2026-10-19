@@ -21,6 +21,8 @@
     "build": "tsc -p tsconfig.build.json",
     "build:lexicon": "node tools/build-lexicon.ts",
     "build:braxen": "node tools/build-braxen.ts",
+    "build:braxen:lexicon": "node tools/build-braxen-lexicon.ts",
+    "merge:lexicon": "node tools/merge-lexicon.ts",
     "frequency": "node tools/build-frequency.ts",
     "frequency:report": "node tools/frequency-report.ts",
     "prune": "node tools/prune-lexicon.ts",

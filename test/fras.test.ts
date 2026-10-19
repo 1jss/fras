@@ -9,6 +9,7 @@ import { SV_RULES_COMPILED } from "../src/rules/sv-rules.ts";
 import { syllabify } from "../src/syllable.ts";
 import {
   fullLexicon,
+  nstBaseline,
   parseLexicon,
   parseRuleIndex,
   type Lexicon,
@@ -33,6 +34,7 @@ import {
 import {
   braxenSegments,
   braxenToIpa,
+  braxenToNstSampa,
   braxenVoiceIpa,
   braxenVoiceSegments,
   classifySegments,
@@ -170,35 +172,49 @@ test("lexicon parses a gzipped JSONL buffer", () => {
 });
 
 test("phonetizeWord uses overrides before the lexicon", () => {
-  const res = phonetizeWord("det", { lexicon: mockLexicon({ det: ['"dEt'] }) });
+  const res = phonetizeWord("nåt", { lexicon: mockLexicon({ nåt: ['"nOt'] }) });
   assert.equal(res.source, "override");
-  assert.equal(res.variants[0], '"de:');
+  assert.equal(res.variants[0], '"no:t');
 });
 
-test("overrides: han and dig use the spoken forms", () => {
-  assert.equal(
-    textToIpa("Han ska hjälpa dig", { lexicon: null, morphology: false }),
-    "hˈan skˈɑː jˈɛlpa dˈɛj",
-  );
+test("overrides: curated corrections win over the lexicon and rules", () => {
+  // `nåt`: spoken long form (the lexicon has the short /nɔt/).
+  assert.equal(textToIpa("nåt", { morphology: false }), "nˈoːt");
+  // `några`: keeps the g (the lexicon drops it).
+  assert.equal(textToIpa("några", { morphology: false }), "nˈoːɡra");
 });
 
 test("full lexicon keeps one preferred variant for merged homographs", () => {
   const lex = fullLexicon();
+  // The merged lexicon is Braxen-first, so the NST SAMPA spelling differs from
+  // NST's own (stress sits before the nucleus); compare the voiced result.
   const expected: Record<string, string> = {
-    han: '"han',
-    hans: '"hans',
-    dig: '"dEj',
-    sen: '"se:n',
-    vi: '"vi:',
-    oss: '"Os',
-    du: '"d}:',
-    hon: '"hUn',
-    kan: '"kan',
-    men: '"mEn',
+    han: "hˈan",
+    hans: "hˈans",
+    dig: "dˈɛj",
+    sen: "sˈɛn",
+    vi: "vˈiː",
+    oss: "ˈɔs",
+    du: "dˈʉː",
+    hon: "hˈʊn",
+    kan: "kˈɑːn",
+    men: "mˈɛn",
   };
-  for (const [word, variant] of Object.entries(expected)) {
-    assert.deepEqual(lex.lookup(word)!.variants, [variant], word);
+  for (const [word, ipa] of Object.entries(expected)) {
+    const entry = lex.lookup(word)!;
+    assert.equal(entry.variants.length, 1, word);
+    assert.equal(toVoiceIpa(entry.variants[0]!), ipa, word);
   }
+});
+
+test("merged lexicon keeps every NST full-word headword (no word lost)", () => {
+  const merged = fullLexicon();
+  const nst = nstBaseline();
+  const missing: string[] = [];
+  for (const w of nst.keys()) {
+    if (isFullWord(w) && !merged.lookup(w)) missing.push(w);
+  }
+  assert.equal(missing.length, 0, `lost ${missing.length} e.g. ${missing.slice(0, 5).join(", ")}`);
 });
 
 test("textToIpa joins words and keeps punctuation", () => {
@@ -357,6 +373,32 @@ test("braxenVoiceIpa renders stress and the voice alphabet", () => {
   assert.equal(braxenVoiceIpa("b 'i: . l ex n"), "bˈiːlən");
   assert.equal(braxenVoiceIpa("t w e n . t i ~ f 'o: r0"), "tvɛntɪfˈoː");
   assert.equal(braxenVoiceIpa("b 'o . l", { stress: false }), "bɔl");
+});
+
+test("braxenToNstSampa maps Base to voice-equivalent NST SAMPA", () => {
+  // Structure, stress and symbol mapping; `r0` is dropped.
+  assert.equal(braxenToNstSampa("b 'i: . l ex n"), 'b"i:$l@n');
+  assert.equal(braxenToNstSampa("k 'o rt"), 'k"Ot`');
+  assert.equal(braxenToNstSampa("x 'uu: k"), 'x\\"}:k');
+  assert.equal(braxenToNstSampa("'eu r"), '"E*Ur');
+  assert.equal(braxenToNstSampa("t w e n . t i ~ f 'o: r0"), 'tven$tI_f"o:');
+  // The whole point: the runtime rendering equals the auditioned Braxen one.
+  const cases = [
+    "b 'i: . l ex n",
+    "k 'o rt",
+    "x 'uu: k",
+    'c "ae: . rl ,e: k',
+    "s k 'o t",
+    'g "a: . t ,a',
+    "t w e n . t i ~ f 'o: r0",
+    "'eu r",
+    "d 'o m",
+    "s p r \"i ng . ,a",
+    "n \"o: . g ,o n",
+  ];
+  for (const base of cases) {
+    assert.equal(toVoiceIpa(braxenToNstSampa(base)), braxenVoiceIpa(base), base);
+  }
 });
 
 test("nstSegments uses the standard IPA map, not the voice profile", () => {

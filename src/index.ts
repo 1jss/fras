@@ -33,9 +33,11 @@ export {
 } from "./to-voice-ipa.ts";
 export {
   braxenToIpa,
+  braxenToNstSampa,
   braxenVoiceIpa,
   braxenVoiceSegments,
   BRAXEN_BASE_TO_IPA,
+  BRAXEN_BASE_TO_NST,
   NST_SAMPA_TO_IPA,
   type BraxenEntry,
   type BraxenToVoiceIpaOptions,
@@ -43,10 +45,13 @@ export {
 export {
   lexicon,
   fullLexicon,
+  nstBaseline,
   parseLexicon,
   ruleIndex,
   parseRuleIndex,
   FULL_LEXICON_PATH,
+  NST_BASELINE_PATH,
+  BRAXEN_LEXICON_PATH,
   PRUNED_LEXICON_PATH,
   RULE_INDEX_PATH,
   type Lexicon,

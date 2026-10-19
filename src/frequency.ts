@@ -4,7 +4,7 @@
  * Språkbanken's *Flex* frequency lexicon (CC-BY-4.0) gives per-million frequencies
  * for three corpora — novel, newspaper and forum. We sum the three into a single
  * per-million figure per word. `tools/build-frequency.ts` builds a compact table
- * restricted to headwords of the NST lexicon; `tools/frequency-report.ts` prints
+ * restricted to headwords of the merged lexicon; `tools/frequency-report.ts` prints
  * the dropoff distribution and `tools/prune-lexicon.ts` uses it to cut the long
  * tail. Nothing here is needed at phonetization time.
  */
