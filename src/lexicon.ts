@@ -1,8 +1,9 @@
 /**
  * Runtime access to the compact NST lexicon built by `tools/build-lexicon.ts`.
  *
- * Records are gzipped JSON-lines: `{"w": headword, "v": [variants], "s": seg?}`.
- * Loaded lazily and cached for the process lifetime.
+ * Records are gzipped JSON-lines: `{"w": headword, "v": [pronunciation], "s": seg?}`.
+ * The committed build stores one preferred pronunciation per word; `--all-variants`
+ * builds may contain more. Loaded lazily and cached for the process lifetime.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -11,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 export interface LexiconEntry {
-  /** NST SAMPA variants, in source order. */
+  /** NST SAMPA pronunciations; the first is preferred (one in the default build). */
   variants: string[];
   /** Compound segmentation (field 3) when it contains `+`. */
   segmentation?: string;

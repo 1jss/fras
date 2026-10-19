@@ -3,7 +3,7 @@
  *
  * Order of resolution for a word:
  *   1. curated overrides;
- *   2. lexicon lookup (production/pruned NST, all variants preserved);
+ *   2. lexicon lookup (production/pruned NST, preferred pronunciation);
  *   3. morphology (compound split / suffix stripping, lexicon-backed);
  *   4. generic rules (letter-to-sound), plus a stress/boundary correction for
  *      words the rules already cover phonemically.

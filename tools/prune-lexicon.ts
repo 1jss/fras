@@ -55,6 +55,7 @@ import {
   type Lexicon,
 } from "../src/lexicon.ts";
 import { parseFrequency, pruneDecision, type FrequencyTable } from "../src/frequency.ts";
+import { OVERRIDES } from "../data/overrides.ts";
 import { applyStructureCorrection, phonemeSequence, phonetizeWord } from "../src/phonetize.ts";
 import { applyRules, applyRulesTrace } from "../src/rules/engine.ts";
 import { SV_RULES_COMPILED } from "../src/rules/sv-rules.ts";
@@ -114,23 +115,6 @@ function segments(s: string): string[] {
     .map((t) => t.symbol);
 }
 
-function levenshtein(a: string[], b: string[]): number {
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  let prev = Array.from({ length: n + 1 }, (_, j) => j);
-  for (let i = 1; i <= m; i += 1) {
-    const cur = [i];
-    for (let j = 1; j <= n; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost);
-    }
-    prev = cur;
-  }
-  return prev[n]!;
-}
-
 /** First phoneme where `rules` diverges from `target`, with its source grapheme. */
 function firstDivergence(word: string, rules: string, target: string): Divergence | null {
   const a = segments(rules);
@@ -182,15 +166,10 @@ function structurePrefixes(target: string): Array<[number, string]> {
 }
 
 function missRecord(word: string, variants: string[], ruleSegments: string): CoverageRecord {
-  let best = Infinity;
-  let target = variants[0] ?? "";
-  for (const v of variants) {
-    const d = levenshtein(segments(ruleSegments), segments(v));
-    if (d < best) {
-      best = d;
-      target = v;
-    }
-  }
+  // The build stores the preferred variant first (one variant per word by
+  // default). The coverage report only describes how the rules differ from it;
+  // alternative NST variants must not influence routing.
+  const target = variants[0] ?? "";
   return {
     w: word,
     rules: ruleSegments,
@@ -209,14 +188,16 @@ interface Classification {
 function classify(word: string, variants: string[]): Classification {
   const ruleSegments = applyRules(word, SV_RULES_COMPILED);
   const ruleKey = phonemeSequence(ruleSegments);
-  const target = variants.find((v) => phonemeSequence(v) === ruleKey);
-
-  if (!target) {
+  // Only the preferred variant (stored first) may be routed to the rules.
+  // Matching an alternative NST variant would silently change the pronunciation
+  // of the word in running text.
+  const target = variants[0];
+  if (!target || phonemeSequence(target) !== ruleKey) {
     return { status: "miss", record: missRecord(word, variants, ruleSegments), prefixes: [] };
   }
 
   const produced = assignStress(syllabify(ruleSegments), 0);
-  if (variants.includes(produced)) {
+  if (target === produced) {
     return {
       status: "matched",
       record: { w: word, rules: ruleSegments, variants, status: "matched", divergence: null },
@@ -352,7 +333,7 @@ async function main(): Promise<void> {
         droppedMass += freq?.frequency(w) ?? 0;
         continue;
       }
-      const rec: { w: string; v: string[]; s?: string } = { w, v: e.variants };
+      const rec: { w: string; v: string[]; s?: string } = { w, v: [e.variants[0]!] };
       if (e.segmentation) rec.s = e.segmentation;
       pruned.push(JSON.stringify(rec));
     }
@@ -398,12 +379,13 @@ function verifyProduction(): void {
   for (const w of full.keys()) {
     if (prod.lookup(w)) continue; // pronunciation stored; resolution is a lookup
     if (!rules.lookup(w)) continue; // frequency/shape-dropped; divergence is allowed
+    if (OVERRIDES[w]) continue; // curated override intentionally supersedes NST
     const e = full.lookup(w);
     if (!e) continue;
     checked += 1;
     const out = phonetizeWord(w).variants[0] ?? "";
-    if (!e.variants.includes(out)) {
-      regressions.push(`${w}: got ${out}  want ${e.variants.join(" | ")}`);
+    if (out !== e.variants[0]) {
+      regressions.push(`${w}: got ${out}  want ${e.variants[0]}`);
     }
   }
   if (regressions.length) {

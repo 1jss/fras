@@ -8,6 +8,7 @@ import { applyRules, applyRulesTrace } from "../src/rules/engine.ts";
 import { SV_RULES_COMPILED } from "../src/rules/sv-rules.ts";
 import { syllabify } from "../src/syllable.ts";
 import {
+  fullLexicon,
   parseLexicon,
   parseRuleIndex,
   type Lexicon,
@@ -149,6 +150,32 @@ test("phonetizeWord uses overrides before the lexicon", () => {
   const res = phonetizeWord("det", { lexicon: mockLexicon({ det: ['"dEt'] }) });
   assert.equal(res.source, "override");
   assert.equal(res.variants[0], '"de:');
+});
+
+test("overrides: han and dig use the spoken forms", () => {
+  assert.equal(
+    textToIpa("Han ska hjälpa dig", { lexicon: null, morphology: false }),
+    "ˈhan ˈskɑː ˈjɛlpa ˈdɛj",
+  );
+});
+
+test("full lexicon keeps one preferred variant for merged homographs", () => {
+  const lex = fullLexicon();
+  const expected: Record<string, string> = {
+    han: '"han',
+    hans: '"hans',
+    dig: '"dEj',
+    sen: '"se:n',
+    vi: '"vi:',
+    oss: '"Os',
+    du: '"d}:',
+    hon: '"hUn',
+    kan: '"kan',
+    men: '"mEn',
+  };
+  for (const [word, variant] of Object.entries(expected)) {
+    assert.deepEqual(lex.lookup(word)!.variants, [variant], word);
+  }
 });
 
 test("textToIpa joins words and keeps punctuation", () => {

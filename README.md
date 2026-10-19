@@ -3,15 +3,37 @@
 Swedish grapheme-to-phoneme for [Piper](https://github.com/rhasspy/piper), built to
 **replace espeak-ng** for Swedish synthesis. It has two layers:
 
-- **specific overrides** — the full NST pronunciation lexicon
-  (`swe030224NST.pron`, 927k lines) plus a small curated list for common words NST
-  omits;
+- **specific overrides** — a compact, one-pronunciation-per-word lexicon built from
+  NST (`swe030224NST.pron`, 927k source entries) plus a small curated list for common
+  words NST omits;
 - **generic rules** — Swedish letter-to-sound rules, seeded from espeak-ng's
   `sv_rules`/`sv_list` and iterated against NST.
 
-The canonical internal representation is **NST SAMPA** (lossless: accent I/II, all
-variants, syllables, compounds). Translation to the alphabet a Piper voice was
-trained on happens only at the edge.
+The canonical internal representation is **NST SAMPA** (accent I/II, syllables,
+compounds). The committed lexicon stores one preferred variant per word; the builder
+can emit every NST variant with `--all-variants` for analysis. Translation to the
+alphabet a Piper voice was trained on happens only at the edge.
+
+## How the lexicon picks a pronunciation
+
+NST has many source entries per lowercased headword: inflections, homographs and
+proper names. Lowercasing merges them, so file order alone is not safe — the proper
+name `Han` (long /ɑː/) precedes the pronoun `han` (short /a/), and `VI` (an acronym)
+is listed before `vi` (we).
+
+`npm run build:lexicon` stores one pronunciation per word, ranking source entries by:
+
+1. exact lowercase spelling, non-proper-name;
+2. exact lowercase proper names;
+3. other non-proper-name spellings (acronyms such as `VI`);
+4. other proper names;
+5. within a rank: function words (pronouns, determiners, conjunctions,
+   prepositions, adverbs), then verbs, then everything else;
+6. NST file order.
+
+The raw NST source remains the full baseline; `--all-variants` emits all variants,
+preferred first. A few high-frequency homographs still need a nudge, so they live in
+`data/overrides.ts`.
 
 ## Why the edge adapter exists
 
@@ -92,8 +114,8 @@ row and produce a different pronunciation. The rule index makes rule-covered wor
 take the rule path deterministically, so they are independent of every other prune.
 
 `prune:write` re-verifies the written artifacts against NST end to end (`--check`
-does the same on demand). The full `data/nst-lexicon.jsonl.gz` stays committed as the
-comparison baseline, so rule changes are always re-scored against it.
+does the same on demand). The preferred-variant `data/nst-lexicon.jsonl.gz` stays
+committed as the comparison baseline, so rule changes are always re-scored against it.
 
 ### Usage-based pruning
 
@@ -128,7 +150,7 @@ therefore only requires **rule-index** words to reproduce NST.
 ```
 text ─▶ tokenize
         ├─ override table            (highest priority)
-        ├─ NST lexicon               (pruned; full kept as baseline)
+        ├─ NST lexicon               (one preferred variant; pruned)
         ├─ rule index                (rule-covered -> rules, skip morphology)
         ├─ morphology                (compound split, suffix stripping)
         └─ generic rules             (grapheme -> NST SAMPA)
@@ -154,7 +176,7 @@ word and returns the whole utterance as one `[[ …IPA… ]]` block.
 | `src/normalize.ts` | numbers/abbreviations -> words (`spellNumber`, `normalizeText`) |
 | `src/piper.ts` | espeak-free Piper handoff (`piperPhonemes`, `piperBlocks`, `preload`) |
 | `data/overrides.ts` | curated word overrides |
-| `tools/build-lexicon.ts` | build the full compact lexicon |
+| `tools/build-lexicon.ts` | build the compact one-variant-per-word lexicon |
 | `tools/build-frequency.ts` | fetch Flex → compact frequency table |
 | `tools/frequency-report.ts` | long-tail dropoff statistics |
 | `tools/prune-lexicon.ts` | rule-coverage audit + production prune (rules + frequency) |
