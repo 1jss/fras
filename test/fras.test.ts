@@ -30,6 +30,18 @@ import {
   phonetizeWord,
   textToIpa,
 } from "../src/phonetize.ts";
+import {
+  braxenSegments,
+  braxenToIpa,
+  braxenVoiceIpa,
+  braxenVoiceSegments,
+  classifySegments,
+  matchClass,
+  nstSegments,
+  nstVoiceSegments,
+  parseBraxen,
+  parseBraxenBase,
+} from "../src/braxen.ts";
 
 test("parseNst splits symbols, stress and boundaries", () => {
   const tokens = parseNst('""gA:$ta');
@@ -51,19 +63,30 @@ test("syllabify groups into stressed syllables", () => {
 });
 
 test("toVoiceIpa splits retroflexes and rewrites the sje-sound", () => {
-  assert.equal(toVoiceIpa('"kOt`'), "ˈkɔrt");
-  assert.equal(toVoiceIpa('"bu:d`'), "ˈbuːrd");
-  assert.equal(toVoiceIpa('"x\\}:k'), "ˈʃʉːk");
-  assert.equal(toVoiceIpa('""x\\U$t`a'), "ˈʃʊrta");
+  assert.equal(toVoiceIpa('"kOt`'), "kˈɔrt");
+  assert.equal(toVoiceIpa('"bu:d`'), "bˈuːrd");
+  assert.equal(toVoiceIpa('"x\\}:k'), "ʃˈʉːk");
+  assert.equal(toVoiceIpa('""x\\U$t`a'), "ʃˈʊrta");
 });
 
 test("toVoiceIpa maps short ö to œ and g to script g", () => {
-  assert.equal(toVoiceIpa('"m9t'), "ˈmœt");
-  assert.equal(toVoiceIpa('""gA:$ta'), "ˈɡɑːta");
+  assert.equal(toVoiceIpa('"m9t'), "mˈœt");
+  assert.equal(toVoiceIpa('""gA:$ta'), "ɡˈɑːta");
 });
 
 test("toVoiceIpa collapses accent II to primary stress", () => {
-  assert.equal(toVoiceIpa('""mE$nI$x\\a'), "ˈmɛnɪʃa");
+  assert.equal(toVoiceIpa('""mE$nI$x\\a'), "mˈɛnɪʃa");
+});
+
+test("toVoiceIpa places stress before the nucleus, as espeak-ng does", () => {
+  // The voices were trained on espeak output like `blˈandat`, `tˈɛŋkt`; a mark
+  // before the onset consonants is voiced as an extra vowel.
+  assert.equal(toVoiceIpa('""bland$dat'), "blˈanddat");
+  assert.equal(toVoiceIpa('"tENkt'), "tˈɛŋkt");
+  assert.equal(toVoiceIpa('"bi:$len'), "bˈiːlɛn");
+  assert.equal(toVoiceIpa('e$kU$nU$"mi:'), "ɛkʊnʊmˈiː");
+  // stress before an onset-free first syllable stays word-initial
+  assert.equal(toVoiceIpa('"A:'), "ˈɑː");
 });
 
 test("rules: soft k and sj digraphs", () => {
@@ -133,7 +156,7 @@ test("morphology: returns null when nothing applies", () => {
 test("annotate wraps words and preserves punctuation", () => {
   const lex = mockLexicon({ hej: ['"hEj'] });
   const res = annotate("Hej, du!", { lexicon: lex, morphology: false });
-  assert.equal(res.text, "[[ˈhɛj]], [[ˈdʉː]]!");
+  assert.equal(res.text, "[[hˈɛj]], [[dˈʉː]]!");
   assert.equal(res.hits, 2);
 });
 
@@ -155,7 +178,7 @@ test("phonetizeWord uses overrides before the lexicon", () => {
 test("overrides: han and dig use the spoken forms", () => {
   assert.equal(
     textToIpa("Han ska hjälpa dig", { lexicon: null, morphology: false }),
-    "ˈhan ˈskɑː ˈjɛlpa ˈdɛj",
+    "hˈan skˈɑː jˈɛlpa dˈɛj",
   );
 });
 
@@ -180,7 +203,7 @@ test("full lexicon keeps one preferred variant for merged homographs", () => {
 
 test("textToIpa joins words and keeps punctuation", () => {
   const lex = mockLexicon({ hej: ['"hEj'] });
-  assert.equal(textToIpa("Hej!", { lexicon: lex, morphology: false }), "ˈhɛj!");
+  assert.equal(textToIpa("Hej!", { lexicon: lex, morphology: false }), "hˈɛj!");
 });
 
 test("applyRulesTrace records the grapheme span behind each output", () => {
@@ -236,7 +259,7 @@ test("normalizeText spells numbers and expands abbreviations", () => {
 
 test("piperBlocks wraps a fully phonetized utterance in one block", () => {
   const block = piperBlocks("Hej!");
-  assert.equal(block, "[[ˈhɛj!]]");
+  assert.equal(block, "[[hˈɛj!]]");
 });
 
 test("piperPhonemes spells out numbers and drops unmapped punctuation", () => {
@@ -289,4 +312,103 @@ test("pruneDecision drops non-words and the low-frequency tail", () => {
   assert.equal(pruneDecision("a-kassa", null, { minFreq: 1, fullWordsOnly: true }), "non-word");
   // Frequency pruning is off by default, so everything reachable is kept.
   assert.equal(pruneDecision("sällsynt", freq, { minFreq: 0, fullWordsOnly: false }), "keep");
+});
+
+test("braxenSegments maps Base to IPA and drops stress/boundaries/r0", () => {
+  assert.deepEqual(braxenSegments("b 'o . l"), ["b", "ɔ", "l"]);
+  assert.deepEqual(braxenSegments("t w e n . t i ~ f 'o: r0"), [
+    "t",
+    "w",
+    "e",
+    "n",
+    "t",
+    "ɪ",
+    "f",
+    "oː",
+  ]);
+  assert.deepEqual(braxenSegments("g 'a: . t a"), ["ɡ", "ɑː", "t", "a"]);
+});
+
+test("parseBraxenBase peels stress marks", () => {
+  assert.deepEqual(
+    parseBraxenBase('"a n . t ,a: l').map((t) => [t.type, t.symbol]),
+    [
+      ["stress", '"'],
+      ["phoneme", "a"],
+      ["phoneme", "n"],
+      ["boundary", "."],
+      ["phoneme", "t"],
+      ["stress", ","],
+      ["phoneme", "a:"],
+      ["phoneme", "l"],
+    ],
+  );
+});
+
+test("braxenToIpa concatenates and can render stress", () => {
+  assert.equal(braxenToIpa("b 'o . l"), "bɔl");
+  assert.equal(braxenToIpa("b 'o . l", { stress: true }), "bˈɔl");
+});
+
+test("braxenVoiceIpa renders stress and the voice alphabet", () => {
+  // `ex` -> ə, `w` -> v, `e` -> ɛ, `r0` dropped; boundaries dropped.
+  // Braxen writes the stress mark before the nucleus, like espeak-ng.
+  assert.equal(braxenVoiceIpa('"a: - l ,a: . g a . r ex'), "ˈɑːlˌɑːɡarə");
+  assert.equal(braxenVoiceIpa("b 'i: . l ex n"), "bˈiːlən");
+  assert.equal(braxenVoiceIpa("t w e n . t i ~ f 'o: r0"), "tvɛntɪfˈoː");
+  assert.equal(braxenVoiceIpa("b 'o . l", { stress: false }), "bɔl");
+});
+
+test("nstSegments uses the standard IPA map, not the voice profile", () => {
+  assert.deepEqual(nstSegments('"kOt`'), ["k", "ɔ", "ʈ"]);
+  assert.deepEqual(nstSegments("x\\}:k"), ["ɧ", "ʉː", "k"]);
+  assert.deepEqual(nstSegments('"m9t'), ["m", "œ", "t"]);
+});
+
+test("voice segments convert both sides into the Piper alphabet", () => {
+  assert.deepEqual(nstVoiceSegments('"kOt`'), ["k", "ɔ", "rt"]);
+  assert.deepEqual(braxenVoiceSegments("k 'o rt"), ["k", "ɔ", "rt"]);
+  // sje-sound: NST `x\` and Braxen `x` both become ʃ.
+  assert.deepEqual(nstVoiceSegments("x\\}:k"), ["ʃ", "ʉː", "k"]);
+  assert.deepEqual(braxenVoiceSegments("x 'uu: k"), ["ʃ", "ʉː", "k"]);
+});
+
+test("classifySegments classifies by Piper conversion", () => {
+  // Different IPA (NST 9 = œ vs Braxen ö = ø) but the same Piper symbol.
+  const rounded = classifySegments(
+    nstSegments('"m9t'),
+    braxenSegments("m 'ö t"),
+    nstVoiceSegments('"m9t'),
+    braxenVoiceSegments("m 'ö t"),
+  );
+  assert.equal(rounded.strict, 1);
+  assert.equal(rounded.voice, 0);
+  assert.equal(matchClass(rounded.strict, rounded.voice), "inventory");
+
+  // Retroflex notation collapses to identical standard IPA -> match.
+  const retro = classifySegments(
+    nstSegments('"kOt`'),
+    braxenSegments("k 'o rt"),
+    nstVoiceSegments('"kOt`'),
+    braxenVoiceSegments("k 'o rt"),
+  );
+  assert.equal(matchClass(retro.strict, retro.voice), "match");
+
+  // NST `e` (Piper ɛ) vs Braxen `ex` (Piper ə): Piper output would differ.
+  const schwa = classifySegments(["e"], ["ə"], ["ɛ"], ["ə"]);
+  assert.equal(matchClass(schwa.strict, schwa.voice), "real");
+
+  // The length mark is preserved by the voice alphabet, so length is real.
+  const length = classifySegments(["e"], ["eː"], ["ɛ"], ["eː"]);
+  assert.equal(matchClass(length.strict, length.voice), "real");
+});
+
+test("parseBraxen reads a gzipped JSONL sample", () => {
+  const raw = `{"w":"bil","v":"b 'i: l","pos":"NN","lang":"swe"}\n`;
+  const index = parseBraxen(gzipSync(Buffer.from(raw)));
+  assert.equal(index.size, 1);
+  const entries = index.get("bil")!;
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0]!.base, "b 'i: l");
+  assert.equal(entries[0]!.pos, "NN");
 });

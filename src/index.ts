@@ -32,6 +32,15 @@ export {
   type ToVoiceIpaOptions,
 } from "./to-voice-ipa.ts";
 export {
+  braxenToIpa,
+  braxenVoiceIpa,
+  braxenVoiceSegments,
+  BRAXEN_BASE_TO_IPA,
+  NST_SAMPA_TO_IPA,
+  type BraxenEntry,
+  type BraxenToVoiceIpaOptions,
+} from "./braxen.ts";
+export {
   lexicon,
   fullLexicon,
   parseLexicon,

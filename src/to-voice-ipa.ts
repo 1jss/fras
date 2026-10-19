@@ -8,12 +8,15 @@
  * - `r` + `t/d/l/n` is emitted as two phonemes (not the precomposed retroflexes
  *   `ʈ ɖ ɭ ɳ` the PR introduced), which the voices render as retroflexes.
  * - the sje-sound is written `ʃ`, not `ɧ`.
+ * - stress marks are emitted immediately before the nucleus (`blˈandat`), as
+ *   espeak-ng does, not at the syllable onset; the voices voice an onset-placed
+ *   mark as an extra vowel. See `tokensToIpa`.
  *
  * Everything else is calibrated against the voices' own espeak-ng G2P and
  * `data/nst-xsampa.sym` (see `tools/audit-voice.ts` for the empirical check).
  */
 
-import { parseNst, type NstToken } from "./sampa.ts";
+import { isVowel, parseNst, type NstPhoneme, type NstToken } from "./sampa.ts";
 
 export interface VoiceProfile {
   /** Human-readable voice name. */
@@ -114,25 +117,34 @@ function tokensToIpa(
   wordBoundarySpace: boolean,
 ): string {
   let out = "";
-  let lastWasStress = false;
+  // A stress mark is buffered and flushed immediately before the next vowel:
+  // the voices were trained on espeak-ng output, which writes the mark after the
+  // onset consonants (`blˈandat`, `tˈɛŋkt`), not at the syllable onset. A mark
+  // placed before consonants is voiced by the model as an extra vowel.
+  let pendingStress: string | null = null;
+  const flushStress = (): void => {
+    if (pendingStress === null) return;
+    out += pendingStress;
+    pendingStress = null;
+  };
+
   for (const t of tokens) {
     if (t.type === "phoneme") {
+      if (pendingStress !== null && isVowel(t.symbol as NstPhoneme)) flushStress();
       out += profile.map[t.symbol] ?? t.symbol;
-      lastWasStress = false;
       continue;
     }
-    if (t.type === "syllable" || t.type === "compound") continue;
-    if (t.type === "word-boundary") {
-      if (wordBoundarySpace) out += " ";
+    if (t.type === "syllable") continue;
+    if (t.type === "compound" || t.type === "word-boundary") {
+      flushStress(); // never lose a mark that did not reach a vowel
+      if (t.type === "word-boundary" && wordBoundarySpace) out += " ";
       continue;
     }
     if (!withStress) continue;
     const mark = STRESS[t.type];
-    if (!mark) continue;
-    if (lastWasStress) continue; // never stack stress marks
-    out += mark;
-    lastWasStress = true;
+    if (mark && pendingStress === null) pendingStress = mark; // never stack
   }
+  flushStress(); // trailing stress with no following vowel
   return out;
 }
 

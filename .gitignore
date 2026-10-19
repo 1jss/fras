@@ -6,6 +6,9 @@ dist/
 # Downloaded Flex archive / unpacked CSV (rebuild with: npm run frequency)
 data/.cache/
 
+# Interactive NST-vs-Braxen listening log (rebuild by running: npm run audition)
+data/audition-log.jsonl
+
 # Large upstream source data (185 MB) -- kept locally, not in git history
 swe030224NST.pron
 

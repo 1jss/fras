@@ -53,9 +53,9 @@ Everything else is calibrated against the voices' own espeak-ng output and
 ```ts
 import { textToIpa, annotate, phonetizeWord, piperBlocks } from "fras";
 
-textToIpa("Hej på dig!");       // "ˈhɛj ˈpoː ˈdɛj!"  (voice IPA)
-annotate("Hej på dig!").text;   // "[[ˈhɛj]] [[ˈpoː]] [[ˈdɛj]]!"  (per-word blocks)
-piperBlocks("Kapitel 12, 46 500."); // "[[kaˈpɪtɛl ˈtɔlv, …]]" (one block, numbers spelled)
+textToIpa("Hej på dig!");       // "hˈɛj pˈoː dˈɛj!"  (voice IPA)
+annotate("Hej på dig!").text;   // "[[hˈɛj]] [[pˈoː]] [[dˈɛj]]!"  (per-word blocks)
+piperBlocks("Kapitel 12, 46 500."); // "[[kapˈɪtɛl tˈɔlv, …]]" (one block, numbers spelled)
 phonetizeWord("kärlek");        // { variants: ['""s\'E:$%l`e:k'], source: "lexicon" }
 ```
 
@@ -88,6 +88,9 @@ npm test
 npm run typecheck
 npm run eval            # rule-only accuracy against NST
 npm run audit -- --voice /path/to/sv_SE-alma-medium.onnx
+npm run build:braxen    # fetch Braxen 1.0 -> data/braxen.jsonl.gz (NST headwords)
+npm run audit:nst       # NST vs Braxen phonetic audit -> data/braxen-nst-audit.jsonl.gz
+npm run audition        # hear the top NST-vs-Braxen differences (needs voxos)
 ```
 
 `npm run eval` is the metric that drives the "rules until they cover NST" goal: it
@@ -145,6 +148,35 @@ Words dropped this way fall through to morphology → generic rules and may dive
 from NST; that is acceptable precisely because they are rare. `verifyProduction()`
 therefore only requires **rule-index** words to reproduce NST.
 
+### NST vs Braxen audit
+
+`npm run audit:nst` is an advisory cross-check of the NST transcriptions against
+**Braxen 1.0** (see *Data & attribution*), independent of the rule layer. Both
+resources are normalized to a shared standard IPA *and* to the voice alphabet fras
+hands to Piper (`SV_VOICE_MAP`); Braxen is converted the same way, with foreign
+phonemes collapsed onto the nearest symbol the voice can speak. Segment sequences
+are compared ignoring stress, syllables, compounds, morphemes and word boundaries,
+best-of-variants. Each shared headword is classified as
+
+- `match` — identical IPA;
+- `inventory` — different IPA, but both collapse to the same Piper input (retroflex
+  and sje notation, the four e-sounds, ...): Piper would not render a difference;
+- `real` — the Piper input, and therefore the output, would differ.
+
+The summary (counts, top substitution pairs, examples) goes to stdout, and the
+per-word mismatches are also written to `data/braxen-nst-audit.jsonl.gz` (+ a
+`.meta.json`). This is **advisory only** and has no effect on the runtime pipeline.
+`npm run build:braxen` downloads Braxen and emits `data/braxen.jsonl.gz`, the
+compact NST-overlap subset the audit reads.
+
+`npm run audition` turns that audit into a listening test: it picks clean examples
+of the top divergence buckets (the target substitution is the *only* difference),
+biased toward common words via the Flex frequency table, and plays the NST
+rendering first and the Braxen rendering second through [voxos](../voxos)'s
+one-shot `say --raw` (Piper). You pick first/second/replay/same and it prints and
+logs (`data/audition-log.jsonl`) a per-bucket preference tally — which resource's
+transcriptions actually voice well with the current voice. Also advisory.
+
 ## Pipeline
 
 ```
@@ -176,11 +208,15 @@ word and returns the whole utterance as one `[[ …IPA… ]]` block.
 | `src/normalize.ts` | numbers/abbreviations -> words (`spellNumber`, `normalizeText`) |
 | `src/piper.ts` | espeak-free Piper handoff (`piperPhonemes`, `piperBlocks`, `preload`) |
 | `data/overrides.ts` | curated word overrides |
+| `src/braxen.ts` | Braxen Base ↔ IPA tables + segment comparison (audit only) |
 | `tools/build-lexicon.ts` | build the compact one-variant-per-word lexicon |
 | `tools/build-frequency.ts` | fetch Flex → compact frequency table |
+| `tools/build-braxen.ts` | fetch Braxen → compact NST-overlap subset |
 | `tools/frequency-report.ts` | long-tail dropoff statistics |
 | `tools/prune-lexicon.ts` | rule-coverage audit + production prune (rules + frequency) |
 | `tools/eval.ts` | NST accuracy harness |
+| `tools/audit-nst.ts` | NST vs Braxen phonetic audit (advisory) |
+| `tools/audition.ts` | interactive NST-vs-Braxen listening test (advisory) |
 | `tools/audit-voice.ts` | check emitted symbols against a voice |
 
 ## Status
@@ -199,6 +235,10 @@ the token coverage those rows provided. See *Usage-based pruning* above.
 ## Data & attribution
 
 - NST Swedish pronunciation lexicon (`swe030224NST.pron`).
+- Braxen 1.0 — Swedish Agency for Accessible Media (MTM) & Språkbanken,
+  [Apache-2.0](https://github.com/sprakbankental/braxen); source of the advisory
+  phonetic audit (`data/braxen.jsonl.gz`, `data/braxen-nst-audit.jsonl.gz`). Please
+  cite Tånnander & Edlund (2025), *Braxen 1.0*, NoDaLiDa/Baltic-HLT.
 - Flex frequency lexicon — Språkbanken, [CC-BY-4.0](https://sprakbanken.se/resurser/flex)
   (usage statistics for the frequency prune; `data/flex-frequency.tsv.gz`).
 - `nst-xsampa.sym` — Wikispeech, CC0.

@@ -20,12 +20,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "build:lexicon": "node tools/build-lexicon.ts",
+    "build:braxen": "node tools/build-braxen.ts",
     "frequency": "node tools/build-frequency.ts",
     "frequency:report": "node tools/frequency-report.ts",
     "prune": "node tools/prune-lexicon.ts",
     "prune:write": "node tools/prune-lexicon.ts --write --all --min-freq 0.01 --full-words-only",
     "eval": "node tools/eval.ts",
     "audit": "node tools/audit-voice.ts",
+    "audit:nst": "node tools/audit-nst.ts",
+    "audition": "node tools/audition.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts"
   },
