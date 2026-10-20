@@ -196,6 +196,9 @@ test("overrides: curated corrections win over the lexicon and rules", () => {
   assert.equal(textToIpa("nåt", { morphology: false }), "nˈoːt");
   // `några`: keeps the g (the lexicon drops it).
   assert.equal(textToIpa("några", { morphology: false }), "nˈoːɡra");
+  // `kan`: everyday verb with short /a/ (the lexicon's Braxen noun row is the
+  // rare khan /kɑːn/).
+  assert.equal(textToIpa("kan"), "kˈan");
 });
 
 test("full lexicon keeps one preferred variant for merged homographs", () => {

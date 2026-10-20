@@ -26,4 +26,9 @@ export const OVERRIDES: Readonly<Record<string, readonly string[]>> = {
   // Braxen's preferred row is an odd `IN` reading /vaʂ/; the noun /vɑːʂ/ is the
   // everyday reading.
   vars: ['"vA:s`'],
+
+  // Braxen ranks the noun `kan` (khan, /kɑːn/) above the verb `kan` (can, /kan/)
+  // because the POS order prefers nouns. In running text the verb dominates and
+  // NST already has the short reading, so restore it.
+  kan: ['"kan'],
 };
