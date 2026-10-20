@@ -26,15 +26,21 @@ homographs and proper names. Lowercasing merges them, so file order alone is not
 and stores one pronunciation per word, ranking the source rows by:
 
 1. spelled exactly like the lowercased headword (not a capitalized proper name);
-2. function words (determiners, conjunctions, pronouns, prepositions, adverbs),
+2. **usage** — the POS-conditioned frequency table (`data/pos-frequency.tsv.gz`,
+   `npm run frequency`): the row whose MSD tag is most frequent in running text wins.
+   That resolves the homographs the old POS order got wrong — `kan` is the verb
+   /kan/ (can), not the rare noun /kɑːn/ (khan), and `var`, `drog`, `bor`, `läst`
+   take their verb reading. Exact-tag matches are preferred, so a row of a
+   *different* form that merely shares the POS cannot win;
+3. function words (determiners, conjunctions, pronouns, prepositions, adverbs),
    then nouns, adjectives, verbs, proper names, acronyms, participles;
-3. Braxen file order.
+4. Braxen file order.
 
 `npm run merge:lexicon` then takes every Braxen word and fills the gaps from NST:
 every NST headword that is a full word and that Braxen lacks is copied over, so no
 dictionary word is lost. The merge **asserts** that every NST full-word headword
-resolves in the output. A few high-frequency readings still need a nudge, so they live
-in `data/overrides.ts`.
+resolves in the output. A few readings the frequency table cannot settle still need a
+nudge, so they live in `data/overrides.ts`.
 
 ## Why the edge adapter exists
 
@@ -81,12 +87,12 @@ anything. Numbers and common abbreviations are spelled out first
 ```sh
 npm install
 npm run build:lexicon        # swe030224NST.pron -> data/nst-lexicon.jsonl.gz (baseline)
-npm run build:braxen:lexicon # fetch Braxen 1.0 -> data/braxen-lexicon.jsonl.gz
+npm run frequency            # download Corpus word statistics -> data/pos-frequency.tsv.gz
+npm run build:braxen:lexicon # Braxen + usage selection -> data/braxen-lexicon.jsonl.gz
 npm run merge:lexicon        # Braxen + NST fallback -> data/lexicon.jsonl.gz
 npm run prune                # rule coverage over the full lexicon (dry run)
 npm run prune:write          # emit pruned lexicon + rule index + coverage report
 npm run build:compact        # pack the production lexicon + rule index (runtime format)
-npm run frequency            # fetch Flex -> data/flex-frequency.tsv.gz (usage statistics)
 npm run frequency:report     # long-tail dropoff stats for the --min-freq cutoff
 npm test
 npm run typecheck
@@ -132,28 +138,28 @@ committed as the comparison baseline, so rule changes are always re-scored again
 
 ### Usage-based pruning
 
-Rule coverage says whether a row *can* be replaced; frequency says whether it is
-worth keeping at all. `npm run frequency` downloads Språkbanken's **Flex** frequency
-lexicon (CC-BY-4.0), sums the novel/newspaper/forum per-million rates, and commits a
-compact table (`data/flex-frequency.tsv.gz`) restricted to merged-lexicon headwords.
-`npm run frequency:report` prints the dropoff — rows surviving each threshold and the
-Swedish token coverage they carry — which is how the cutoff was chosen.
+Rule coverage says whether a row *can* be replaced; frequency says whether it is worth
+keeping at all — and, before that, which reading a homograph gets. `npm run frequency`
+downloads Språkbanken's **Corpus word statistics** (CC-BY-4.0), streams the 5.5 GB
+word/POS/frequency list without unpacking it to disk, stops at the cutoff and commits a
+compact table (`data/pos-frequency.tsv.gz`) of `(word, MSD tag)` per-million rates
+restricted to Braxen ∪ NST headwords. `npm run frequency:report` prints the dropoff —
+rows surviving each threshold and the token coverage they carry — and the same table
+supplies `build:braxen:lexicon`'s reading selection.
 
-The committed policy is `--min-freq 0.03 --full-words-only`:
+The committed policy is `--min-freq 0.01 --full-words-only`. The table's per-million is
+a **single** corpus rate, whereas the older Flex table summed three corpora (novel,
+newspaper, forum), so `0.01` here is the equivalent of that `0.03`:
 
-| layer | rows | share of all Flex tokens |
+| layer | rows | share of all tokens |
 | --- | --- | --- |
-| rule index (rules reproduce them) | 216,683 | ~43.2% |
-| production lexicon (stored) | 253,340 | ~48.4% |
-| dropped long tail | 709,580 | ~0.06% |
+| rule index (rules reproduce them) | 216,691 | ~38% |
+| production lexicon (stored) | 198,392 | ~40% |
+| dropped long tail | 764,520 | remainder (< 0.01/M each) |
 
-Dropping the long tail takes the stored list from 970k to 253k rows (~8 MB → 2.4 MB gz)
-and loses 1,730 of ~2.99M per-million tokens the stored rows used to provide — 0.06% of
-all tokens, 0.11% of the stored rows' coverage. The distribution is a textbook Zipf
-tail: 523k candidate rows never appear in Flex at all, and the curve flattens sharply
-after ~50k rows. `--full-words-only` additionally drops rows the tokenizer can never
-reach (hyphenated, underscore-joined, affix and abbreviation entries), independent of
-frequency.
+The full merged lexicon is 1,179,603 headwords. `--full-words-only` additionally drops
+rows the tokenizer can never reach (hyphenated, underscore-joined, affix and
+abbreviation entries), independent of frequency.
 
 Rule coverage is lower than it was against NST (~19% vs 29%): the rules were iterated
 against NST, and Braxen's transcriptions differ (schwa `@`, `ae`/`oe` vowels, more
@@ -209,7 +215,7 @@ compact NST-overlap subset the audit reads.
 
 `npm run audition` turns that audit into a listening test: it picks clean examples
 of the top divergence buckets (the target substitution is the *only* difference),
-biased toward common words via the Flex frequency table, and plays the NST
+biased toward common words via the POS frequency table, and plays the NST
 rendering first and the Braxen rendering second through [voxos](../voxos)'s
 one-shot `say --raw` (Piper). You pick first/second/replay/same and it prints and
 logs (`data/audition-log.jsonl`) a per-bucket preference tally — which resource's
@@ -238,7 +244,8 @@ word and returns the whole utterance as one `[[ …IPA… ]]` block.
 | `src/sampa.ts` | NST SAMPA model: symbols, tokenizer, syllables |
 | `src/to-voice-ipa.ts` | NST SAMPA -> voice IPA adapter + profile |
 | `src/lexicon.ts` | loads full/pruned lexicon + rule index |
-| `src/frequency.ts` | Flex frequency table + usage-prune policy |
+| `src/frequency.ts` | word-frequency interface + usage-prune policy |
+| `src/pos-frequency.ts` | POS-conditioned frequency table (reading selection + prune) |
 | `src/morphology.ts` | compound/suffix fallback |
 | `src/rules/` | rule engine + Swedish rules |
 | `src/phonetize.ts` | the pipeline + public API |
@@ -250,7 +257,7 @@ word and returns the whole utterance as one `[[ …IPA… ]]` block.
 | `tools/build-lexicon.ts` | build the NST baseline lexicon (`data/nst-lexicon.jsonl.gz`) |
 | `tools/build-braxen-lexicon.ts` | Braxen → NST SAMPA lexicon (asserts voice equivalence) |
 | `tools/merge-lexicon.ts` | merge Braxen + NST fallback (asserts no word lost) |
-| `tools/build-frequency.ts` | fetch Flex → compact frequency table |
+| `tools/build-pos-frequency.ts` | Corpus word statistics → compact POS frequency table |
 | `tools/build-braxen.ts` | fetch Braxen → compact NST-overlap subset (audit) |
 | `tools/frequency-report.ts` | long-tail dropoff statistics |
 | `tools/prune-lexicon.ts` | rule-coverage audit + production prune (rules + frequency) |
@@ -263,14 +270,15 @@ word and returns the whole utterance as one `[[ …IPA… ]]` block.
 
 v2: Braxen-first lexicon + NST fallback + adapter + rules + morphology + eval + prune.
 The rule layer is a **headstart**: it reproduces the lexicon's phonemes for ~18% of the
-merged headwords today, and all of that is pruned from the production lexicon and routed
-to the rules (0.3% match the full string; 17.5% need a small structure correction). The
-remaining ~82% is mostly stress, schwa and loanword vowel length in the rules — the
-intended target for a learned model behind the same `G2P` seam.
+merged headwords today (0.3% match the full string; 18.1% need a small structure
+correction), and all of that is pruned from the production lexicon and routed to the
+rules. The remaining ~82% is mostly stress, schwa and loanword vowel length in the rules
+— the intended target for a learned model behind the same `G2P` seam.
 
 The production lexicon is additionally cut to the common core by usage
-(`--min-freq 0.03 --full-words-only`): 970k stored rows → 263k, keeping ~99.89% of
-the token coverage those rows provided. See *Usage-based pruning* above.
+(`--min-freq 0.01 --full-words-only`): 962,912 storage candidates → 198,392 stored, the
+rest falling through to morphology and the generic rules. The **same table decides each
+homograph's reading**, so `kan` scores the verb. See *Usage-based pruning* above.
 
 ## Data & attribution
 
@@ -281,8 +289,10 @@ the token coverage those rows provided. See *Usage-based pruning* above.
   Edlund (2025), *Braxen 1.0*, NoDaLiDa/Baltic-HLT.
 - NST Swedish pronunciation lexicon (`swe030224NST.pron`) — full-word **fallback** for
   headwords Braxen lacks (`data/nst-lexicon.jsonl.gz`).
-- Flex frequency lexicon — Språkbanken, [CC-BY-4.0](https://sprakbanken.se/resurser/flex)
-  (usage statistics for the frequency prune; `data/flex-frequency.tsv.gz`).
+- Corpus word statistics — Språkbanken,
+  [CC-BY-4.0](https://sprakbanken.se/en/resources/ordstatistik)
+  (word/POS per-million frequencies for reading selection and the frequency prune;
+  `data/pos-frequency.tsv.gz`). Replaces the earlier word-only Flex table.
 - `nst-xsampa.sym` — Wikispeech, CC0.
 - espeak-ng `dictsource/sv_rules`, `sv_list` — GPL-3.0 (used as a reference for the
   rule layer only; no code is copied).

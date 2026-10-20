@@ -3,7 +3,7 @@ dist/
 *.log
 .DS_Store
 
-# Downloaded Flex archive / unpacked CSV (rebuild with: npm run frequency)
+# Downloaded corpus-statistics / Braxen archives (rebuild with: npm run frequency)
 data/.cache/
 
 # Interactive NST-vs-Braxen listening log (rebuild by running: npm run audition)

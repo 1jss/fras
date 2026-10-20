@@ -12,9 +12,18 @@
  * preference:
  *
  *   1. rows spelled exactly like the lowercased headword (not capitalized);
- *   2. function words, then nouns, adjectives, verbs, proper names, acronyms,
+ *   2. **usage** — the POS-conditioned frequency table (`data/pos-frequency.tsv.gz`,
+ *      `tools/build-pos-frequency.ts`): the row whose MSD tag is most frequent in
+ *      running text wins. Exact-tag matches are preferred; otherwise the row's
+ *      POS group (the MSD prefix) is used. Words below the table's cutoff fall
+ *      through to the next criteria;
+ *   3. function words, then nouns, adjectives, verbs, proper names, acronyms,
  *      participles, everything else;
- *   3. Braxen file order.
+ *   4. Braxen file order.
+ *
+ * Usage is what fixes homographs the POS order got wrong (`kan`, `var`, `drog`,
+ * `bor`, `läst`): the everyday reading (verb) is far more frequent than the rare
+ * noun/khan reading, so no curated override is needed for them.
  *
  * The Braxen Base transcription is converted to canonical NST SAMPA with
  * `braxenToNstSampa()`. The build **asserts** the voice-equivalence invariant
@@ -26,7 +35,7 @@
  *
  * Usage:
  *   node tools/build-braxen-lexicon.ts [--tsv PATH] [--out PATH] [--meta PATH]
- *                                      [--force]
+ *                                      [--pos-freq PATH] [--force]
  */
 
 import {
@@ -34,6 +43,7 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { createInterface } from "node:readline";
@@ -45,6 +55,7 @@ import { gzipSync } from "node:zlib";
 
 import { braxenToNstSampa, braxenVoiceIpa } from "../src/braxen.ts";
 import { isFullWord } from "../src/frequency.ts";
+import { parsePosFrequency, posOf, type PosFrequencyTable } from "../src/pos-frequency.ts";
 import { toVoiceIpa } from "../src/to-voice-ipa.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -81,14 +92,18 @@ interface Meta {
   converted: number;
   mismatches: number;
   sourceModified: string | null;
+  /** POS frequency table used for homograph selection, or null when absent. */
+  posFreq: string | null;
+  /** Multi-row headwords whose reading was decided by usage. */
+  usageSelected: number;
 }
 
 /**
  * POS groups that are more likely to be the everyday reading of an ambiguous
- * spelling, mirroring `tools/build-lexicon.ts`. Nouns precede verbs here because
- * Braxen lists inflected participle/supine rows (PC/VB) before the noun for some
- * homographs (`rest`, `syntes`); the curated overrides still win where the
- * default is wrong.
+ * spelling, mirroring `tools/build-lexicon.ts`. This is only the **fallback**
+ * when the usage table has no entry for the word; where usage is known it decides
+ * (see `usageScore`), so the previous "nouns precede verbs" rule no longer picks
+ * the rare noun reading of `kan`, `var`, `drog`, ...
  */
 const FUNCTION_POS = new Set(["DT", "KN", "PN", "PP", "IN", "AB", "RG", "HS", "HP", "HA", "HD"]);
 const POS_RANK: Readonly<Record<string, number>> = {
@@ -110,9 +125,35 @@ function caseRank(row: Row): number {
   return row.exact ? 0 : 1;
 }
 
-function compareRows(a: Row, b: Row): number {
+/** Braxen tags use spaces; the frequency table uses the same MSD tag with dots. */
+function msdTag(tags: string): string {
+  // Braxen writes `SUB/OBJ`, the statistics file `SUB+OBJ`; normalize.
+  return tags.trim().split(/\s+/).join(".").replace(/\//g, "+");
+}
+
+type Scorer = (row: Row) => number;
+
+/**
+ * Usage scorer for a headword's candidate rows. Higher wins.
+ *
+ * Exact MSD-tag matches are used whenever the table has any for the word; this
+ * stops a row of a *different* form that merely shares the POS (e.g. `skall`'s
+ * `VB PRS SFO` row) from beating the row the usage table actually attests.
+ * When the table has no exact tag at all, its POS-group totals are used instead.
+ */
+function makeScorer(table: PosFrequencyTable | null, word: string, rows: Row[]): Scorer {
+  if (!table) return () => 0;
+  if (rows.some((r) => table.tagFrequency(word, msdTag(r.tags)) > 0)) {
+    return (row) => table.tagFrequency(word, msdTag(row.tags));
+  }
+  return (row) => table.posFrequency(word, posOf(msdTag(row.tags)));
+}
+
+function compareRows(a: Row, b: Row, score: Scorer): number {
   const c = caseRank(a) - caseRank(b);
   if (c !== 0) return c;
+  const u = score(b) - score(a);
+  if (u !== 0) return u;
   const p = posRank(a.tags) - posRank(b.tags);
   if (p !== 0) return p;
   return a.order - b.order;
@@ -123,6 +164,7 @@ function parseArgs(argv: string[]) {
     tsv: resolve(ROOT, "data/.cache/braxen-sv.tsv"),
     out: resolve(ROOT, "data/braxen-lexicon.jsonl.gz"),
     meta: resolve(ROOT, "data/braxen-lexicon.meta.json"),
+    posFreq: resolve(ROOT, "data/pos-frequency.tsv.gz"),
     force: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -131,6 +173,7 @@ function parseArgs(argv: string[]) {
     else if (key === "--tsv") args.tsv = resolve(argv[++i] ?? "");
     else if (key === "--out") args.out = resolve(argv[++i] ?? "");
     else if (key === "--meta") args.meta = resolve(argv[++i] ?? "");
+    else if (key === "--pos-freq") args.posFreq = resolve(argv[++i] ?? "");
   }
   return args;
 }
@@ -153,6 +196,16 @@ async function ensureBraxen(tsvPath: string, force: boolean): Promise<string | n
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const sourceModified = await ensureBraxen(args.tsv, args.force);
+
+  let posFreq: PosFrequencyTable | null = null;
+  if (existsSync(args.posFreq)) {
+    posFreq = parsePosFrequency(readFileSync(args.posFreq));
+  } else {
+    process.stderr.write(
+      `warning: ${args.posFreq} not found; homographs fall back to the POS order\n` +
+        `         (run: npm run frequency)\n`,
+    );
+  }
 
   const table = new Map<string, Row[]>();
   let rows = 0;
@@ -189,9 +242,12 @@ async function main(): Promise<void> {
 
   const lines: string[] = [];
   let mismatches = 0;
+  let usageSelected = 0;
   const examples: string[] = [];
   for (const [w, list] of table) {
-    list.sort(compareRows);
+    const score = makeScorer(posFreq, w, list);
+    list.sort((a, b) => compareRows(a, b, score));
+    if (list.length > 1 && score(list[0]!) > 0) usageSelected += 1;
     // Deduplicate identical Base transcriptions (same pronunciation, several POS).
     const base = list[0]!.base;
     const nst = braxenToNstSampa(base);
@@ -234,6 +290,8 @@ async function main(): Promise<void> {
     converted: lines.length,
     mismatches,
     sourceModified,
+    posFreq: posFreq ? args.posFreq : null,
+    usageSelected,
   };
   mkdirSync(dirname(args.meta), { recursive: true });
   writeFileSync(args.meta, `${JSON.stringify(meta, null, 2)}\n`);
@@ -243,6 +301,7 @@ async function main(): Promise<void> {
       `  swe rows           ${swe}\n` +
       `  malformed          ${malformed}\n` +
       `  full-word headwords ${table.size}\n` +
+      `  usage-selected     ${usageSelected} (multi-row homographs)\n` +
       `  voice mismatches   ${mismatches}\n` +
       `wrote ${args.out} (${gz.length} bytes gz, ${raw.length} bytes raw)\n` +
       `wrote ${args.meta}\n`,

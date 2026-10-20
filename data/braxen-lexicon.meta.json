@@ -2,7 +2,7 @@
   "source": "Braxen 1.0",
   "url": "https://raw.githubusercontent.com/sprakbankental/braxen/main/dict/braxen-sv.tsv",
   "license": "Apache-2.0",
-  "fetchedAt": "2026-10-19T19:08:43.694Z",
+  "fetchedAt": "2026-10-20T06:08:46.127Z",
   "language": "swe",
   "rows": 857017,
   "malformed": 1,
@@ -10,5 +10,7 @@
   "headwords": 684448,
   "converted": 684448,
   "mismatches": 0,
-  "sourceModified": null
+  "sourceModified": null,
+  "posFreq": "/home/jesper/GitHub/fras/data/pos-frequency.tsv.gz",
+  "usageSelected": 21986
 }

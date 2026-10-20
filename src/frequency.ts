@@ -1,18 +1,19 @@
 /**
- * Flex frequency lexicon: usage statistics for usage-based lexicon pruning.
+ * Word-frequency interface and usage-prune policy.
  *
- * Språkbanken's *Flex* frequency lexicon (CC-BY-4.0) gives per-million frequencies
- * for three corpora — novel, newspaper and forum. We sum the three into a single
- * per-million figure per word. `tools/build-frequency.ts` builds a compact table
- * restricted to headwords of the merged lexicon; `tools/frequency-report.ts` prints
- * the dropoff distribution and `tools/prune-lexicon.ts` uses it to cut the long
- * tail. Nothing here is needed at phonetization time.
+ * The per-word rate used for pruning now comes from the POS-conditioned table
+ * (`src/pos-frequency.ts`, built by `tools/build-pos-frequency.ts` from
+ * Språkbanken's *Corpus word statistics*); `tools/frequency-report.ts` prints the
+ * dropoff distribution and `tools/prune-lexicon.ts` uses it to cut the long tail.
+ * The plain `word<TAB>frequency` (de)serializer and the `FrequencyTable` seam are
+ * kept generic — anything that can answer `frequency(word)` satisfies it. Nothing
+ * here is needed at phonetization time.
  */
 
 import { gunzipSync, gzipSync } from "node:zlib";
 
 export interface FrequencyTable {
-  /** Flex frequency (per million, novel+newspaper+forum); 0 when absent. */
+  /** Usage frequency (per million); 0 when absent. */
   frequency(word: string): number;
   /** Words in the table. */
   readonly size: number;
@@ -27,14 +28,12 @@ export interface FrequencyMeta {
   url: string;
   license: string;
   fetchedAt: string;
-  /** Last-Modified of the upstream archive, when the server sent one. */
-  flexModified?: string;
-  /** Token mass of the *entire* Flex list, before intersecting with NST. */
+  /** Last-Modified of the upstream source, when the server sent one. */
+  sourceModified?: string;
+  /** Token mass of the entire source, before intersecting with the lexicon. */
   totalMass: number;
   /** Rows written to the table. */
   rows: number;
-  /** Full Flex words that were kept (only under `--all`). */
-  all: boolean;
   /** Lexicon the table was intersected with. */
   lexicon: string;
 }
@@ -110,7 +109,7 @@ export function isFullWord(word: string): boolean {
 }
 
 export interface PrunePolicy {
-  /** Drop stored rows below this Flex frequency (per million); 0 disables. */
+  /** Drop stored rows below this usage frequency (per million); 0 disables. */
   minFreq: number;
   /** Drop rows the tokenizer can never reach (see {@link isFullWord}). */
   fullWordsOnly: boolean;

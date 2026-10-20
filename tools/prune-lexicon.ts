@@ -20,8 +20,8 @@
  * past morphology is what makes them prunable: without it, morphology splits almost
  * any row that is removed.
  *
- * Usage-based prune (optional): `--min-freq X` drops rows whose Flex frequency
- * (per million; see `tools/build-frequency.ts`) is below X, and
+ * Usage-based prune (optional): `--min-freq X` drops rows whose per-million
+ * frequency (summed over POS tags; see `tools/build-pos-frequency.ts`) is below X, and
  * `--full-words-only` drops rows the tokenizer can never reach (hyphen/underscore/
  * affix/abbreviation entries). Both apply only to the stored-pronunciation rows;
  * rule-covered words are always routed to the rules. See `tools/frequency-report.ts`
@@ -59,7 +59,8 @@ import {
   type RuleEntry,
 } from "../src/lexicon.ts";
 import { encodeCompactLexicon, encodeCompactRuleIndex } from "../src/compact.ts";
-import { parseFrequency, pruneDecision, type FrequencyTable } from "../src/frequency.ts";
+import { pruneDecision, type FrequencyTable } from "../src/frequency.ts";
+import { parsePosFrequency } from "../src/pos-frequency.ts";
 import { OVERRIDES } from "../data/overrides.ts";
 import { applyStructureCorrection, phonemeSequence, phonetizeWord } from "../src/phonetize.ts";
 import { applyRules, applyRulesTrace } from "../src/rules/engine.ts";
@@ -69,7 +70,7 @@ import { parseNst } from "../src/sampa.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const COVERAGE_PATH = join(ROOT, "data", "rule-coverage.jsonl.gz");
-const FREQ_PATH = join(ROOT, "data", "flex-frequency.tsv.gz");
+const FREQ_PATH = join(ROOT, "data", "pos-frequency.tsv.gz");
 
 type Status = "matched" | "structure-only" | "miss";
 
@@ -320,14 +321,13 @@ async function main(): Promise<void> {
         process.exitCode = 1;
         return;
       }
-      freq = parseFrequency(readFileSync(FREQ_PATH));
+      freq = parsePosFrequency(readFileSync(FREQ_PATH));
     }
 
     const prunedEntries: Array<[string, LexiconEntry]> = [];
     const ruleEntries: Array<[string, RuleEntry]> = [];
     let droppedLowFreq = 0;
     let droppedNonWord = 0;
-    let droppedMass = 0;
     const policy = { minFreq: args.minFreq, fullWordsOnly: args.fullWords };
     for (const w of full.keys()) {
       const e = full.lookup(w);
@@ -343,7 +343,6 @@ async function main(): Promise<void> {
       }
       if (decision === "low-freq") {
         droppedLowFreq += 1;
-        droppedMass += freq?.frequency(w) ?? 0;
         continue;
       }
       const entry: LexiconEntry = { variants: [e.variants[0]!] };
@@ -379,7 +378,7 @@ async function main(): Promise<void> {
         `frequency/shape prune: dropped ${dropped} rows` +
           `${args.fullWords ? ` (${droppedNonWord} non-word)` : ""}` +
           `${args.minFreq > 0 ? ` (${droppedLowFreq} below ${args.minFreq}/M)` : ""}` +
-          `; token mass lost ${droppedMass.toFixed(0)} per-million\n`,
+          `\n`,
       );
     }
   }

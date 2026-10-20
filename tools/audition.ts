@@ -16,7 +16,7 @@
  *
  * Selection is deliberately narrow: a record joins a bucket only when the target
  * voice substitution is its *only* difference, and examples are drawn from the
- * top of the Flex frequency table so the words are familiar.
+ * top of the POS frequency table so the words are familiar.
  *
  * Usage:
  *   node tools/audition.ts [--pairs "ɛ→ə,ʊ→ɔ,…"] [--per-bucket N] [--top K]
@@ -40,11 +40,12 @@ import {
   braxenVoiceSegments,
   nstVoiceSegments,
 } from "../src/braxen.ts";
-import { isFullWord, parseFrequency, type FrequencyTable } from "../src/frequency.ts";
+import { isFullWord, type FrequencyTable } from "../src/frequency.ts";
+import { parsePosFrequency } from "../src/pos-frequency.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const AUDIT_PATH = join(ROOT, "data", "braxen-nst-audit.jsonl.gz");
-const FREQ_PATH = join(ROOT, "data", "flex-frequency.tsv.gz");
+const FREQ_PATH = join(ROOT, "data", "pos-frequency.tsv.gz");
 
 /** The divergence buckets the audit surfaced as the top real differences. */
 const DEFAULT_PAIRS = [
@@ -195,7 +196,7 @@ function loadAudit(pairs: string[]): {
   return { buckets, counts };
 }
 
-/** Pick `n` clean, common examples for a bucket (top-K by Flex frequency). */
+/** Pick `n` clean, common examples for a bucket (top-K by usage frequency). */
 function selectExamples(
   candidates: Candidate[],
   freq: FrequencyTable | null,
@@ -258,8 +259,8 @@ async function main(): Promise<void> {
     throw new Error(`audit not found at ${AUDIT_PATH}; run: npm run audit:nst`);
   }
 
-  const freq = existsSync(FREQ_PATH)
-    ? parseFrequency(readFileSync(FREQ_PATH))
+  const freq: FrequencyTable | null = existsSync(FREQ_PATH)
+    ? parsePosFrequency(readFileSync(FREQ_PATH))
     : null;
   if (!freq && !args.statsOnly) {
     process.stderr.write(

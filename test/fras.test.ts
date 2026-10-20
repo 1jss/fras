@@ -196,9 +196,21 @@ test("overrides: curated corrections win over the lexicon and rules", () => {
   assert.equal(textToIpa("nåt", { morphology: false }), "nˈoːt");
   // `några`: keeps the g (the lexicon drops it).
   assert.equal(textToIpa("några", { morphology: false }), "nˈoːɡra");
-  // `kan`: everyday verb with short /a/ (the lexicon's Braxen noun row is the
-  // rare khan /kɑːn/).
-  assert.equal(textToIpa("kan"), "kˈan");
+});
+
+test("usage picks the everyday homograph reading", () => {
+  // POS-conditioned frequency (`tools/build-braxen-lexicon.ts`) picks the verb
+  // over the rare noun/khan spelling, so these no longer need overrides.
+  const expected: Record<string, string> = {
+    kan: "kˈan", // not the noun khan /kɑːn/
+    drog: "drˈuːɡ", // preterite of dra, not the noun /droːɡ/
+    bor: "bˈuːr", // present of bo, not the noun /boːr/
+    läst: "lˈɛːst", // supine of läsa, not the noun /lɛst/
+    skall: "skˈal", // the modal, not the noun /skɑːl/
+  };
+  for (const [word, ipa] of Object.entries(expected)) {
+    assert.equal(textToIpa(word), ipa, word);
+  }
 });
 
 test("full lexicon keeps one preferred variant for merged homographs", () => {
@@ -214,7 +226,7 @@ test("full lexicon keeps one preferred variant for merged homographs", () => {
     oss: "ˈɔs",
     du: "dˈʉː",
     hon: "hˈʊn",
-    kan: "kˈɑːn",
+    kan: "kˈan",
     men: "mˈɛn",
   };
   for (const [word, ipa] of Object.entries(expected)) {
