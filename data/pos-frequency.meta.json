@@ -1,0 +1,12 @@
+{
+  "source": "Corpus word statistics (Språkbanken)",
+  "url": "https://svn.spraakbanken.gu.se/sb-arkiv/pub/frekvens/stats_all.txt.zip",
+  "license": "CC-BY-4.0",
+  "fetchedAt": "2026-10-20T06:06:35.566Z",
+  "totalMass": 1000000,
+  "minFreq": 0.01,
+  "words": 257159,
+  "rows": 360096,
+  "lexicon": "Braxen ∪ NST full-word headwords",
+  "archiveModified": "Tue, 22 Apr 2025 12:23:59 GMT"
+}
