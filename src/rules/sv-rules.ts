@@ -60,18 +60,22 @@ function vowelRules(): Rule[] {
   for (const v of Object.keys(LONG)) {
     // Special: a before -tion is short (station, nation, ...).
     if (v === "a") rules.push({ m: v, r: "^tion", o: "a" });
-    // Last vowel of a multisyllabic word: unstressed final syllable (before the
-    // cluster rule, because a reduced final vowel can still precede a cluster).
-    rules.push({
-      m: v,
-      l: `.*[${VOW}].*`,
-      r: `^[^${VOW}]*$`,
-      o: FINAL[v]!,
-      note: "unstressed final syllable",
-    });
+    // Last vowel of a multisyllabic word: unstressed final syllable. For a/e/i
+    // the unstressed rules above already win the tie with the same output, so
+    // this is emitted only for the vowels they do not cover.
+    if (!/^[aei]$/.test(v)) {
+      rules.push({
+        m: v,
+        l: `.*[${VOW}].*`,
+        r: `^[^${VOW}]*$`,
+        o: FINAL[v]!,
+        note: "unstressed final syllable",
+      });
+    }
     rules.push({ m: v, r: SHORT_R, o: SHORT[v]!, note: "short before consonant cluster" });
-    // Last vowel of a monosyllable stays long.
-    rules.push({ m: v, r: `^[^${VOW}]*$`, o: LONG[v]!, note: "monosyllable" });
+    // "Monosyllable" is deliberately absent: a monosyllable falls through to
+    // "long elsewhere", which emits the same symbol, so it can never change the
+    // output.
     rules.push({ m: v, o: LONG[v]!, note: "long elsewhere" });
   }
   return rules;
@@ -83,8 +87,16 @@ function vowelRules(): Rule[] {
  */
 export const SV_RULES: readonly Rule[] = [
   // --- unstressed vowels ----------------------------------------------------
-  // These rules assume primary stress on the first syllable: any later vowel is
-  // unstressed, so it is short and `e` loses its [E] colour (e -> [e]).
+  // Primary stress is assumed on the first syllable, so a later `a`/`e`/`i` is
+  // unstressed and reduces (`e` loses its [E] colour: e -> [e]). Reducing *every*
+  // non-initial vowel the same way was measured to make unknown words markedly
+  // worse (coverage 17.9% -> 14.4%, distance +1.4 pt), so the remaining vowels
+  // keep their final-syllable form via the per-vowel rule below instead.
+  // Reduced final `-eC`: the unstressed vowel of an ending before a single
+  // word-final consonant is schwa `@` in Braxen (boken -> b"u:$k@n,
+  // systemet -> ...m@t, abel -> "A:$b@l, fisken -> f""I$sk%@n). Without this the
+  // rules can never emit `@` at all, though 28% of lexicon words use it.
+  { m: "e", l: `.*[${VOW}].*`, r: "^[nslrt]$", o: "@", note: "schwa in final -eC" },
   { m: "e", l: `.*[${VOW}].*`, o: "e", note: "unstressed e -> [e]" },
   { m: "i", l: `.*[${VOW}].*`, o: "I", note: "unstressed i" },
   { m: "a", l: `.*[${VOW}].*`, o: "a", note: "unstressed a" },
@@ -95,30 +107,18 @@ export const SV_RULES: readonly Rule[] = [
   ...vowelRules(),
 
   // --- common endings (longer than a single grapheme, so they win) ---
-  { m: "ades", r: "$", o: "a$des" },
-  { m: "ade", r: "$", o: "a$de" },
-  { m: "ande", r: "$", o: "an$de" },
-  { m: "ende", r: "$", o: "En$de" },
-
-  // Definite plural / genitive: linking vowel reduced, `r` retroflexed.
-  { m: "ernas", o: "en`as" },
-  { m: "erna", o: "en`a" },
-  { m: "arnas", o: "an`as" },
-  { m: "arna", o: "an`a" },
-  { m: "ornas", o: "Un`as" },
+  // Only the endings that change the phonemes are kept here; the ones whose
+  // output is already produced by decomposing them (and by `morphology.ts`)
+  // were removed. The `$`-only variants carried no information anyway: the
+  // rule path re-syllabifies with `syllable.ts`, discarding rule structure.
+  { m: "ende", o: "En$de" },
   { m: "orna", o: "Un`a" },
 
-  // -era verbs: stressed long e (studera, regering).
-  { m: "eringens", o: "e:rINens" },
+  // -ering / -era verbs: stressed long e (studera, regering).
   { m: "eringarna", o: "e:rINan`a" },
   { m: "eringar", o: "e:rINar" },
-  { m: "eringen", o: "e:rINen" },
   { m: "ering", o: "e:rIN" },
-  { m: "erades", o: "e:ra$des" },
-  { m: "erade", o: "e:ra$de" },
-  { m: "erats", o: "e:rats" },
   { m: "erar", o: "e:rar" },
-  { m: "eras", o: "e:ras" },
   { m: "erat", o: "e:rat" },
   { m: "era", o: "e:ra" },
 
@@ -161,8 +161,9 @@ export const SV_RULES: readonly Rule[] = [
   { m: "c", o: "k" },
 
   // --- n before velars ---
+  // `n` is consumed by the longer `nk`/`ng` rules before it could ever match on
+  // its own, so no separate `n` -> `N` rule is needed (it could never fire).
   { m: "nk", o: "Nk" },
-  { m: "n", r: "^[kg]", o: "N" },
 
   // --- retroflex sources -> NST retroflex symbols ---
   { m: "rt", o: "t`" },

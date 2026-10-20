@@ -137,22 +137,28 @@ The committed policy is `--min-freq 0.03 --full-words-only`:
 
 | layer | rows | share of all Flex tokens |
 | --- | --- | --- |
-| rule index (rules reproduce them) | 209,443 | ~37.7% |
-| production lexicon (stored) | 263,159 | ~53.94% |
-| dropped long tail | 707,001 | ~0.06% |
+| rule index (rules reproduce them) | 216,683 | ~43.2% |
+| production lexicon (stored) | 253,340 | ~48.4% |
+| dropped long tail | 709,580 | ~0.06% |
 
-Dropping the long tail takes the stored list from 970k to 263k rows (~8 MB → 2.4 MB gz)
-and loses 1,728 of ~2.99M per-million tokens the stored rows used to provide — 0.06% of
+Dropping the long tail takes the stored list from 970k to 253k rows (~8 MB → 2.4 MB gz)
+and loses 1,730 of ~2.99M per-million tokens the stored rows used to provide — 0.06% of
 all tokens, 0.11% of the stored rows' coverage. The distribution is a textbook Zipf
 tail: 523k candidate rows never appear in Flex at all, and the curve flattens sharply
 after ~50k rows. `--full-words-only` additionally drops rows the tokenizer can never
 reach (hyphenated, underscore-joined, affix and abbreviation entries), independent of
 frequency.
 
-Rule coverage is lower than it was against NST (18% vs 29%): the rules were iterated
+Rule coverage is lower than it was against NST (~19% vs 29%): the rules were iterated
 against NST, and Braxen's transcriptions differ (schwa `@`, `ae`/`oe` vowels, more
 compound structure), so fewer rows are reproduced by the rules and more must be stored.
 That is the intended trade — the stored rows are the better Braxen pronunciations.
+
+The rule set was re-scored against Braxen and reworked (`src/rules/sv-rules.ts`): the
+rules whose output was already produced by decomposing them (the `$`-only ending rules,
+the monosyllable rules, `n` before `[kg]`) were removed, and a rule was added for the
+reduced vowel of a final `-eC` ending (`boken` → `b"u:$k@n`, `systemet` → `…m@t`),
+which Braxen writes as schwa and the rules previously could not emit at all.
 
 Words dropped this way fall through to morphology → generic rules and may diverge
 from the lexicon; that is acceptable precisely because they are rare.

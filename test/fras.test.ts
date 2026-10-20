@@ -105,9 +105,11 @@ test("rules: retroflex sources and vowel length", () => {
 
 test("rules: unstressed vowels reduce and soft consonants stay hard", () => {
   assert.equal(applyRules("abbedissa", SV_RULES_COMPILED), "abedIsa");
-  assert.equal(applyRules("vägen", SV_RULES_COMPILED), "vE:gen");
-  assert.equal(applyRules("boken", SV_RULES_COMPILED), "bu:ken");
-  assert.equal(applyRules("fisken", SV_RULES_COMPILED), "fIsken");
+  // The reduced vowel of a final `-eC` ending is schwa, as in Braxen
+  // (`v"E:$g@n`, `b"u:$k@n`, `f""I$sk%@n`).
+  assert.equal(applyRules("vägen", SV_RULES_COMPILED), "vE:g@n");
+  assert.equal(applyRules("boken", SV_RULES_COMPILED), "bu:k@n");
+  assert.equal(applyRules("fisken", SV_RULES_COMPILED), "fIsk@n");
   assert.equal(applyRules("flickorna", SV_RULES_COMPILED), "flIkUn`a");
   assert.equal(applyRules("hästarna", SV_RULES_COMPILED), "hEstan`a");
 });
