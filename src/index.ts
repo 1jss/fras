@@ -53,12 +53,20 @@ export {
   NST_BASELINE_PATH,
   BRAXEN_LEXICON_PATH,
   PRUNED_LEXICON_PATH,
+  PRUNED_LEXICON_COMPACT_PATH,
   RULE_INDEX_PATH,
+  RULE_INDEX_COMPACT_PATH,
   type Lexicon,
   type LexiconEntry,
   type RuleIndex,
   type RuleEntry,
 } from "./lexicon.ts";
+export {
+  encodeCompactLexicon,
+  encodeCompactRuleIndex,
+  parseCompactLexicon,
+  parseCompactRuleIndex,
+} from "./compact.ts";
 export { morphological, SUFFIXES, type MorphResult } from "./morphology.ts";
 export { syllabify as syllabifySampa, stripStress, assignStress, syllableCount } from "./syllable.ts";
 export { SV_RULES, SV_RULES_COMPILED } from "./rules/sv-rules.ts";

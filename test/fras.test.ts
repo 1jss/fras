@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { gzipSync } from "node:zlib";
+import { readFileSync } from "node:fs";
+import { gunzipSync, gzipSync } from "node:zlib";
 
 import { parseNst, syllabify as groupSyllables } from "../src/sampa.ts";
 import { toVoiceIpa } from "../src/to-voice-ipa.ts";
@@ -9,12 +10,23 @@ import { SV_RULES_COMPILED } from "../src/rules/sv-rules.ts";
 import { syllabify } from "../src/syllable.ts";
 import {
   fullLexicon,
+  lexicon,
   nstBaseline,
   parseLexicon,
   parseRuleIndex,
+  ruleIndex,
+  PRUNED_LEXICON_PATH,
+  RULE_INDEX_PATH,
   type Lexicon,
   type LexiconEntry,
+  type RuleEntry,
 } from "../src/lexicon.ts";
+import {
+  encodeCompactLexicon,
+  encodeCompactRuleIndex,
+  parseCompactLexicon,
+  parseCompactRuleIndex,
+} from "../src/compact.ts";
 import {
   isFullWord,
   parseFrequency,
@@ -255,6 +267,62 @@ test("parseRuleIndex reads gzipped rule-covered words", () => {
   assert.deepEqual(index.lookup("GATA")!.prefixes, [[2, '$"']]);
   assert.deepEqual(index.lookup("hej")!.prefixes, []);
   assert.equal(index.lookup("nope"), null);
+});
+
+test("compact lexicon round-trips variants, segmentation and missing keys", () => {
+  const entries: Array<[string, LexiconEntry]> = [
+    ["cd", { variants: ['"se:d', '"sE:d'] }],
+    ["ab", { variants: ['"A:b'], segmentation: "a+b" }],
+    ["åäö", { variants: ['"o:'] }],
+  ];
+  const lex = parseCompactLexicon(gzipSync(encodeCompactLexicon(entries)));
+  assert.equal(lex.size, 3);
+  assert.deepEqual(lex.lookup("AB")!.variants, ['"A:b']);
+  assert.equal(lex.lookup("ab")!.segmentation, "a+b");
+  assert.equal(lex.lookup("cd")!.variants.length, 2);
+  assert.deepEqual(lex.lookup("åäö")!.variants, ['"o:']);
+  assert.equal(lex.lookup("nope"), null);
+  // Keys are sorted by UTF-8 bytes (so `å` sorts after ASCII).
+  assert.deepEqual([...lex.keys()], ["ab", "cd", "åäö"]);
+});
+
+test("compact rule index round-trips structure prefixes", () => {
+  const entries: Array<[string, RuleEntry]> = [
+    ["gata", { prefixes: [[2, '$"']] }],
+    ["hej", { prefixes: [] }],
+  ];
+  const index = parseCompactRuleIndex(gzipSync(encodeCompactRuleIndex(entries)));
+  assert.equal(index.size, 2);
+  assert.deepEqual(index.lookup("GATA")!.prefixes, [[2, '$"']]);
+  assert.deepEqual(index.lookup("hej")!.prefixes, []);
+  assert.equal(index.lookup("nope"), null);
+});
+
+test("production compact lexicon matches the JSONL artifact", () => {
+  const compact = lexicon();
+  const source = parseLexicon(readFileSync(PRUNED_LEXICON_PATH));
+  assert.equal(compact.size, source.size);
+  let seen = 0;
+  for (const w of source.keys()) {
+    if (seen++ % 997 !== 0) continue;
+    const a = source.lookup(w)!;
+    const b = compact.lookup(w)!;
+    assert.equal(b.variants[0], a.variants[0], w);
+    assert.equal(b.segmentation, a.segmentation, w);
+  }
+});
+
+test("production compact rule index matches the JSONL artifact", () => {
+  const compact = ruleIndex();
+  const source = parseRuleIndex(readFileSync(RULE_INDEX_PATH));
+  assert.equal(compact.size, source.size);
+  const lines = gunzipSync(readFileSync(RULE_INDEX_PATH)).toString("utf8").split("\n");
+  let seen = 0;
+  for (const line of lines) {
+    if (!line || seen++ % 997 !== 0) continue;
+    const rec = JSON.parse(line) as { w: string; prefixes: Array<[number, string]> };
+    assert.deepEqual(compact.lookup(rec.w)!.prefixes, rec.prefixes, rec.w);
+  }
 });
 
 test("spellNumber renders Swedish cardinals", () => {

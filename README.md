@@ -85,6 +85,7 @@ npm run build:braxen:lexicon # fetch Braxen 1.0 -> data/braxen-lexicon.jsonl.gz
 npm run merge:lexicon        # Braxen + NST fallback -> data/lexicon.jsonl.gz
 npm run prune                # rule coverage over the full lexicon (dry run)
 npm run prune:write          # emit pruned lexicon + rule index + coverage report
+npm run build:compact        # pack the production lexicon + rule index (runtime format)
 npm run frequency            # fetch Flex -> data/flex-frequency.tsv.gz (usage statistics)
 npm run frequency:report     # long-tail dropoff stats for the --min-freq cutoff
 npm test
@@ -108,10 +109,15 @@ whose syllable/stress/compound layout does not get a tiny correction that restor
 lexicon's structure (no phonemes stored). `prune:write` emits:
 
 - `data/lexicon.pruned.jsonl.gz` — the **production** lexicon (only rows rules
-  cannot reproduce), loaded by `lexicon()`;
+  cannot reproduce);
 - `data/rules.jsonl.gz` — the **rule index**: words the rules cover and which are
   therefore routed straight to the rules (skipping morphology), with an optional
   structure correction;
+- `data/lexicon.pruned.compact.gz` / `data/rules.compact.gz` — the packed binary
+  runtime form of the two above (`src/compact.ts`, `npm run build:compact`).
+  `lexicon()` / `ruleIndex()` prefer these: a lookup is a binary search over
+  byte-sorted keys and the data loads into a handful of typed arrays instead of one
+  `Map` object per row, which is what keeps the process small on weak hardware;
 - `data/rule-coverage.jsonl.gz` — per-word classification/divergence, the input for
   automating rule search.
 

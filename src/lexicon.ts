@@ -12,6 +12,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 
+import { parseCompactLexicon, parseCompactRuleIndex } from "./compact.ts";
+
 export interface LexiconEntry {
   /** NST SAMPA pronunciations; the first is preferred (one in the default build). */
   variants: string[];
@@ -47,12 +49,16 @@ export const NST_BASELINE_PATH = join(ROOT, "data", "nst-lexicon.jsonl.gz");
 export const BRAXEN_LEXICON_PATH = join(ROOT, "data", "braxen-lexicon.jsonl.gz");
 /** Production lexicon: only the rows rules cannot reproduce. */
 export const PRUNED_LEXICON_PATH = join(ROOT, "data", "lexicon.pruned.jsonl.gz");
+/** Compact (packed binary) form of the production lexicon; the runtime default. */
+export const PRUNED_LEXICON_COMPACT_PATH = join(ROOT, "data", "lexicon.pruned.compact.gz");
 /**
  * Words the rules reproduce: routed to the rule layer (skipping morphology), with
  * an optional structure correction for the ones whose syllable/stress layout the
  * rules do not match.
  */
 export const RULE_INDEX_PATH = join(ROOT, "data", "rules.jsonl.gz");
+/** Compact (packed binary) form of the rule index; the runtime default. */
+export const RULE_INDEX_COMPACT_PATH = join(ROOT, "data", "rules.compact.gz");
 
 const DEFAULT_PATH = FULL_LEXICON_PATH;
 
@@ -139,6 +145,12 @@ export function nstBaseline(): Lexicon {
  */
 export function lexicon(): Lexicon {
   if (cached) return cached;
+  // Prefer the compact artifact: it loads into a handful of typed arrays instead
+  // of a Map of one object per row (see `src/compact.ts`).
+  if (existsSync(PRUNED_LEXICON_COMPACT_PATH)) {
+    cached = parseCompactLexicon(readFileSync(PRUNED_LEXICON_COMPACT_PATH));
+    return cached;
+  }
   const path = existsSync(PRUNED_LEXICON_PATH) ? PRUNED_LEXICON_PATH : DEFAULT_PATH;
   if (!existsSync(path)) {
     throw new Error(
@@ -200,6 +212,10 @@ export function parseRuleIndex(gz: Buffer): RuleIndex {
 /** Load the rule index (cached); empty when it has not been built. */
 export function ruleIndex(): RuleIndex {
   if (cachedRules) return cachedRules;
+  if (existsSync(RULE_INDEX_COMPACT_PATH)) {
+    cachedRules = parseCompactRuleIndex(readFileSync(RULE_INDEX_COMPACT_PATH));
+    return cachedRules;
+  }
   if (!existsSync(RULE_INDEX_PATH)) {
     cachedRules = EMPTY_RULE_INDEX;
     return cachedRules;

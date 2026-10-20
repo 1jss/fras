@@ -47,13 +47,18 @@ import { gzipSync } from "node:zlib";
 
 import {
   fullLexicon,
-  parseLexicon,
+  lexicon,
   ruleIndex,
   FULL_LEXICON_PATH,
   PRUNED_LEXICON_PATH,
+  PRUNED_LEXICON_COMPACT_PATH,
   RULE_INDEX_PATH,
+  RULE_INDEX_COMPACT_PATH,
   type Lexicon,
+  type LexiconEntry,
+  type RuleEntry,
 } from "../src/lexicon.ts";
+import { encodeCompactLexicon, encodeCompactRuleIndex } from "../src/compact.ts";
 import { parseFrequency, pruneDecision, type FrequencyTable } from "../src/frequency.ts";
 import { OVERRIDES } from "../data/overrides.ts";
 import { applyStructureCorrection, phonemeSequence, phonetizeWord } from "../src/phonetize.ts";
@@ -318,8 +323,8 @@ async function main(): Promise<void> {
       freq = parseFrequency(readFileSync(FREQ_PATH));
     }
 
-    const pruned: string[] = [];
-    const ruleLines: string[] = [];
+    const prunedEntries: Array<[string, LexiconEntry]> = [];
+    const ruleEntries: Array<[string, RuleEntry]> = [];
     let droppedLowFreq = 0;
     let droppedNonWord = 0;
     let droppedMass = 0;
@@ -328,7 +333,7 @@ async function main(): Promise<void> {
       const e = full.lookup(w);
       if (!e) continue;
       if (covered.has(w)) {
-        ruleLines.push(JSON.stringify({ w, prefixes: covered.get(w) ?? [] }));
+        ruleEntries.push([w, { prefixes: covered.get(w) ?? [] }]);
         continue;
       }
       const decision = pruneDecision(w, freq, policy);
@@ -341,17 +346,31 @@ async function main(): Promise<void> {
         droppedMass += freq?.frequency(w) ?? 0;
         continue;
       }
-      const rec: { w: string; v: string[]; s?: string } = { w, v: [e.variants[0]!] };
-      if (e.segmentation) rec.s = e.segmentation;
-      pruned.push(JSON.stringify(rec));
+      const entry: LexiconEntry = { variants: [e.variants[0]!] };
+      if (e.segmentation) entry.segmentation = e.segmentation;
+      prunedEntries.push([w, entry]);
     }
-    writeFileSync(PRUNED_LEXICON_PATH, gzipSync(Buffer.from(pruned.join("\n") + "\n"), { level: 9 }));
+    const prunedLines = prunedEntries.map(([w, e]) =>
+      JSON.stringify(e.segmentation ? { w, v: e.variants, s: e.segmentation } : { w, v: e.variants }),
+    );
+    const ruleLines = ruleEntries.map(([w, e]) => JSON.stringify({ w, prefixes: e.prefixes }));
+    writeFileSync(PRUNED_LEXICON_PATH, gzipSync(Buffer.from(prunedLines.join("\n") + "\n"), { level: 9 }));
     writeFileSync(RULE_INDEX_PATH, gzipSync(Buffer.from(ruleLines.join("\n") + "\n"), { level: 9 }));
+    writeFileSync(
+      PRUNED_LEXICON_COMPACT_PATH,
+      gzipSync(encodeCompactLexicon(prunedEntries), { level: 9 }),
+    );
+    writeFileSync(
+      RULE_INDEX_COMPACT_PATH,
+      gzipSync(encodeCompactRuleIndex(ruleEntries), { level: 9 }),
+    );
     writeFileSync(COVERAGE_PATH, gzipSync(Buffer.from(coverageText()), { level: 9 }));
     const dropped = droppedLowFreq + droppedNonWord;
     process.stdout.write(
-      `\nwrote ${PRUNED_LEXICON_PATH} (${pruned.length} rows)\n` +
-        `wrote ${RULE_INDEX_PATH} (${ruleLines.length} rows)\n` +
+      `\nwrote ${PRUNED_LEXICON_PATH} (${prunedEntries.length} rows)\n` +
+        `wrote ${RULE_INDEX_PATH} (${ruleEntries.length} rows)\n` +
+        `wrote ${PRUNED_LEXICON_COMPACT_PATH}\n` +
+        `wrote ${RULE_INDEX_COMPACT_PATH}\n` +
         `wrote ${COVERAGE_PATH} (${coverage.length} rows)\n` +
         `full baseline kept at ${FULL_LEXICON_PATH}\n`,
     );
@@ -378,9 +397,9 @@ async function main(): Promise<void> {
  */
 function verifyProduction(): void {
   const full = fullLexicon();
-  const prod: Lexicon = existsSync(PRUNED_LEXICON_PATH)
-    ? parseLexicon(readFileSync(PRUNED_LEXICON_PATH))
-    : full;
+  // `lexicon()` picks the compact artifact when present, so this checks exactly
+  // what the runtime loads (falling back to JSONL when it is not built yet).
+  const prod: Lexicon = lexicon();
   const rules = ruleIndex();
   const regressions: string[] = [];
   let checked = 0;

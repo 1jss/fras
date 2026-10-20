@@ -27,6 +27,7 @@
     "frequency:report": "node tools/frequency-report.ts",
     "prune": "node tools/prune-lexicon.ts",
     "prune:write": "node tools/prune-lexicon.ts --write --all --min-freq 0.03 --full-words-only",
+    "build:compact": "node tools/build-compact.ts",
     "eval": "node tools/eval.ts",
     "audit": "node tools/audit-voice.ts",
     "audit:nst": "node tools/audit-nst.ts",
