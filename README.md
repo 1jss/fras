@@ -11,9 +11,9 @@ phoneme block for Piper.
 
 An update to espeak-ng's phonetics broke some existing voices in Piper. The
 Swedish voice models were trained on an older phoneme inventory, and the newer
-phonetics emit symbols those models were not trained on, so some words come out
-wrong. Fras emits the inventory the voices were actually trained on, so every
-symbol it produces is one the voice can speak.
+phonetics emit symbols those models were not trained on, so the voices lost
+certain sounds. Fras emits the inventory the voices were actually trained on, so
+every symbol it produces is one the voice can speak.
 
 ## How
 
@@ -96,3 +96,18 @@ and prunes to the production lexicon + rule index, then verifies the result. The
 NST baseline is a frozen input and is never rebuilt. See
 [docs/development.md](docs/development.md) for the individual steps, the prune
 policy, and maintenance checks.
+
+## Svenska
+
+Fras omvandlar svensk text till svenska fonem i det alfabet som Pipers svenska
+röster tränades på. En uppdatering av espeak-ng:s fonetik gjorde att vissa
+befintliga röster i Piper tappade vissa ljud; Fras skickar i stället de fonem
+rösterna faktiskt tränades på. Uttalet kommer från en ordbok (Braxen 1.0 med NST
+som reserv) och svenska uttalsregler, och kan ges som IPA eller som fonemblock
+till Piper.
+
+## Tags
+
+`swedish` `svenska` `text-to-speech` `talsyntes` `tts` `g2p`
+`grafem-till-fonem` `phonemes` `fonem` `pronunciation` `uttal` `ipa` `piper`
+`espeak-ng` `lexicon` `ordbok` `braxen` `nst`
