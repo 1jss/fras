@@ -3,12 +3,10 @@ dist/
 *.log
 .DS_Store
 
-# Downloaded corpus-statistics / Braxen archives (rebuild with: npm run frequency)
+# Downloaded corpus-statistics / Braxen archives (rebuild with: npm run setup)
 data/.cache/
 
-# Interactive NST-vs-Braxen listening log (rebuild by running: npm run audition)
-data/audition-log.jsonl
-
-# Large upstream source data (185 MB) -- kept locally, not in git history
+# Local copy of the raw NST source lexicon (185 MB) -- never committed; the
+# derived data/nst-lexicon.jsonl.gz is the committed, frozen input
 swe030224NST.pron
 

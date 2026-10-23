@@ -3,7 +3,8 @@
  * Build the compact Braxen-derived lexicon used by the runtime pipeline.
  *
  * Source: **Braxen 1.0** (Apache-2.0), `dict/braxen-sv.tsv` (27 tab-separated
- * fields; see `tools/build-braxen.ts` for the layout).
+ * fields; field 0 orthography, field 1 Base pronunciation, field 2 POS/morphology,
+ * field 3 language code).
  *
  * Every `swe` row whose lowercased orthography is a **full word** (a string
  * `src/tokenize.ts` can emit as a single token — see `isFullWord`) becomes one
@@ -31,7 +32,7 @@
  *
  *   toVoiceIpa(braxenToNstSampa(base)) === braxenVoiceIpa(base)
  *
- * so the runtime reproduces the auditioned Braxen rendering exactly.
+ * so the runtime reproduces the Braxen rendering exactly.
  *
  * Usage:
  *   node tools/build-braxen-lexicon.ts [--tsv PATH] [--out PATH] [--meta PATH]
@@ -100,10 +101,10 @@ interface Meta {
 
 /**
  * POS groups that are more likely to be the everyday reading of an ambiguous
- * spelling, mirroring `tools/build-lexicon.ts`. This is only the **fallback**
- * when the usage table has no entry for the word; where usage is known it decides
- * (see `usageScore`), so the previous "nouns precede verbs" rule no longer picks
- * the rare noun reading of `kan`, `var`, `drog`, ...
+ * spelling. This is only the **fallback** when the usage table has no entry for
+ * the word; where usage is known it decides (see `makeScorer`), so the previous
+ * "nouns precede verbs" rule no longer picks the rare noun reading of `kan`,
+ * `var`, `drog`, ...
  */
 const FUNCTION_POS = new Set(["DT", "KN", "PN", "PP", "IN", "AB", "RG", "HS", "HP", "HA", "HD"]);
 const POS_RANK: Readonly<Record<string, number>> = {

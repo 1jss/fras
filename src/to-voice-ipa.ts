@@ -2,18 +2,17 @@
  * Adapter: canonical NST SAMPA -> the IPA alphabet a Piper voice was trained on.
  *
  * The Swedish Piper voices (`sv_SE-alma-medium`, `sv_SE-nst-medium`, ...) were
- * trained before espeak-ng PR #2364, so their embeddings only cover the older
- * Swedish inventory. Two consequences drive this table:
+ * trained on a specific Swedish inventory, and this table emits exactly that:
  *
- * - `r` + `t/d/l/n` is emitted as two phonemes (not the precomposed retroflexes
- *   `ʈ ɖ ɭ ɳ` the PR introduced), which the voices render as retroflexes.
+ * - `r` + `t/d/l/n` is emitted as two phonemes rather than the precomposed
+ *   retroflexes `ʈ ɖ ɭ ɳ`, which is how the voices were trained to read them.
  * - the sje-sound is written `ʃ`, not `ɧ`.
- * - stress marks are emitted immediately before the nucleus (`blˈandat`), as
- *   espeak-ng does, not at the syllable onset; the voices voice an onset-placed
- *   mark as an extra vowel. See `tokensToIpa`.
+ * - stress marks are emitted immediately before the nucleus (`blˈandat`), not at
+ *   the syllable onset; an onset-placed mark is voiced as an extra vowel.
+ *   See `tokensToIpa`.
  *
- * Everything else is calibrated against the voices' own espeak-ng G2P and
- * `data/nst-xsampa.sym` (see `tools/audit-voice.ts` for the empirical check).
+ * Everything else is calibrated against the voices' own output (see
+ * `tools/audit-voice.ts` for the empirical symbol check).
  */
 
 import { isVowel, parseNst, type NstPhoneme, type NstToken } from "./sampa.ts";
@@ -27,14 +26,14 @@ export interface VoiceProfile {
 
 /**
  * Base mapping shared by the Swedish voices. Values were observed from the
- * voices' bundled espeak-ng output, with the pre-PR#2364 corrections applied.
+ * voices' bundled output, with the voice-inventory corrections applied.
  */
 export const SV_VOICE_MAP: Readonly<Record<string, string>> = {
   // long / short vowel pairs
   "i:": "iː",
   I: "ɪ",
   "e:": "eː",
-  e: "ɛ", // the voices have no close-mid short e; espeak used ɛ
+  e: "ɛ", // the voices have no close-mid short e; ɛ is what they speak
   "E:": "ɛː",
   E: "ɛ",
   "y:": "yː",
@@ -69,7 +68,7 @@ export const SV_VOICE_MAP: Readonly<Record<string, string>> = {
   s: "s",
   h: "h",
   j: "j",
-  // retroflex sources -> split r + consonant (pre-PR#2364)
+  // retroflex sources -> split r + consonant (the voices' inventory)
   "t`": "rt",
   "d`": "rd",
   "n`": "rn",
@@ -118,9 +117,9 @@ function tokensToIpa(
 ): string {
   let out = "";
   // A stress mark is buffered and flushed immediately before the next vowel:
-  // the voices were trained on espeak-ng output, which writes the mark after the
-  // onset consonants (`blˈandat`, `tˈɛŋkt`), not at the syllable onset. A mark
-  // placed before consonants is voiced by the model as an extra vowel.
+  // the voices were trained with the mark after the onset consonants
+  // (`blˈandat`, `tˈɛŋkt`), not at the syllable onset. A mark placed before
+  // consonants is voiced by the model as an extra vowel.
   let pendingStress: string | null = null;
   const flushStress = (): void => {
     if (pendingStress === null) return;

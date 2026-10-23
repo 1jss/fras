@@ -32,20 +32,16 @@ export {
   type ToVoiceIpaOptions,
 } from "./to-voice-ipa.ts";
 export {
-  braxenToIpa,
   braxenToNstSampa,
   braxenVoiceIpa,
-  braxenVoiceSegments,
   BRAXEN_BASE_TO_IPA,
   BRAXEN_BASE_TO_NST,
   NST_SAMPA_TO_IPA,
-  type BraxenEntry,
   type BraxenToVoiceIpaOptions,
 } from "./braxen.ts";
 export {
   lexicon,
   fullLexicon,
-  nstBaseline,
   parseLexicon,
   ruleIndex,
   parseRuleIndex,
@@ -90,8 +86,6 @@ export {
   type PhonemeSource,
   type WordResult,
   type IpaToken,
-  type G2P,
-  defaultG2P,
 } from "./phonetize.ts";
 export { annotate, type AnnotateResult } from "./annotate.ts";
 export { normalizeText, spellNumber } from "./normalize.ts";

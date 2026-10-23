@@ -10,8 +10,9 @@
  *   node tools/audit-voice.ts --voice /path/to/sv_SE-alma-medium.onnx
  *   node tools/audit-voice.ts            # just print the profile's symbols
  *
- * The dynamic half of the audit (confirming a symbol is *voiced*, not just
- * present in the map) needs Piper; see docs/validation.md.
+ * Presence in the map is necessary but not sufficient: a symbol can be present
+ * yet untrained. fras emits only the inventory the voices were trained on by
+ * construction — see `src/to-voice-ipa.ts`.
  */
 
 import { readFileSync } from "node:fs";

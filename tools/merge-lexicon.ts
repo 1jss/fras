@@ -63,7 +63,7 @@ function main(): void {
   for (const path of [args.braxen, args.nst]) {
     if (!existsSync(path)) {
       throw new Error(
-        `missing ${path}; run: npm run build:braxen:lexicon (and npm run build:lexicon for NST)`,
+        `missing ${path}; run: npm run setup (or npm run build:braxen:lexicon + npm run merge:lexicon)`,
       );
     }
   }

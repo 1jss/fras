@@ -3,8 +3,8 @@
  * the NST full-word fallback (`tools/build-braxen-lexicon.ts` + `tools/merge-lexicon.ts`).
  *
  * Records are gzipped JSON-lines: `{"w": headword, "v": [pronunciation], "s": seg?}`.
- * The committed build stores one preferred pronunciation per word; `--all-variants`
- * builds may contain more. Loaded lazily and cached for the process lifetime.
+ * The committed build stores one preferred pronunciation per word. Loaded lazily
+ * and cached for the process lifetime.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -104,7 +104,6 @@ export function parseLexicon(gz: Buffer): Lexicon {
 
 let cached: Lexicon | null = null;
 let cachedFull: Lexicon | null = null;
-let cachedNst: Lexicon | null = null;
 let cachedRules: RuleIndex | null = null;
 
 /**
@@ -124,21 +123,6 @@ export function fullLexicon(): Lexicon {
 }
 
 /**
- * Load the frozen NST baseline (cached). Kept for the "no word lost" check and
- * regression comparisons; the runtime pipeline does not use it.
- */
-export function nstBaseline(): Lexicon {
-  if (cachedNst) return cachedNst;
-  if (!existsSync(NST_BASELINE_PATH)) {
-    throw new Error(
-      `NST baseline not found at ${NST_BASELINE_PATH}; run: npm run build:lexicon`,
-    );
-  }
-  cachedNst = parseLexicon(readFileSync(NST_BASELINE_PATH));
-  return cachedNst;
-}
-
-/**
  * Load the production lexicon (cached): the pruned lexicon when it has been
  * built, otherwise the full lexicon. Words pruned from it are routed to the rules
  * by the rule index.
@@ -154,7 +138,7 @@ export function lexicon(): Lexicon {
   const path = existsSync(PRUNED_LEXICON_PATH) ? PRUNED_LEXICON_PATH : DEFAULT_PATH;
   if (!existsSync(path)) {
     throw new Error(
-      `lexicon not found at ${path}; run: npm run build:lexicon`,
+      `lexicon not found at ${path}; run: npm run setup`,
     );
   }
   cached = parseLexicon(readFileSync(path));

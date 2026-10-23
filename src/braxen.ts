@@ -1,10 +1,15 @@
 /**
- * Braxen 1.0 comparison vocabulary (advisory, build/audit-time only).
+ * Braxen 1.0 Base -> canonical NST SAMPA conversion (build-time only).
  *
- * Nothing in the runtime pipeline (`phonetize.ts` and friends) imports this
- * module. It exists so `tools/audit-nst.ts` can normalize fras's canonical NST
- * SAMPA and Braxen's own *Base* transcription to a shared **standard IPA** and
- * compare segment sequences.
+ * `tools/build-braxen-lexicon.ts` uses this to turn every Braxen *Base*
+ * transcription into the NST SAMPA alphabet the runtime pipeline speaks, so
+ * pronunciations can be sourced from Braxen while the rest of fras stays on its
+ * canonical representation. The table is chosen so the voice rendering is
+ * byte-identical to `braxenVoiceIpa()`:
+ *
+ *   toVoiceIpa(braxenToNstSampa(base)) === braxenVoiceIpa(base)
+ *
+ * (around the whole Braxen source, zero mismatches; the build asserts it.)
  *
  * The Base -> IPA table is ported from Braxen's `p5m/scripts/braxen_conversion.pl`
  * (`encode`), with two documented deviations:
@@ -13,19 +18,8 @@
  *   its hash ends on ASCII `g`; we keep the IPA script g so both sides agree.
  * - `r0` is omitted: the Perl encoder drops it (`next if $p eq 'r0'`), because IPA
  *   has no symbol for it.
- *
- * The NST side uses a dedicated standard-IPA map rather than `SV_VOICE_MAP` from
- * `to-voice-ipa.ts`: that map is the pre-espeak-ng-PR#2364 *voice* alphabet, which
- * deliberately renders retroflexes as `r`+`consonant` and the sje-sound as `ʃ`.
- * Comparing through it would turn notation choices into noise.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { gunzipSync } from "node:zlib";
-
-import { parseNst } from "./sampa.ts";
 import { SV_VOICE_MAP } from "./to-voice-ipa.ts";
 
 /* -------------------------------------------------------------------------- *
@@ -123,11 +117,6 @@ export const BRAXEN_BASE_TO_IPA: Readonly<Record<string, string>> = {
   un: "œ\u0303",
 };
 
-/** Every Braxen Base phoneme, longest first (for greedy reference/validation). */
-export const BRAXEN_PHONEMES: readonly string[] = Object.keys(BRAXEN_BASE_TO_IPA).sort(
-  (a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0),
-);
-
 const BASE_BOUNDARIES: ReadonlySet<string> = new Set([".", "-", "~", "|"]);
 const BASE_STRESS: ReadonlySet<string> = new Set(["'", '"', ","]);
 
@@ -168,41 +157,12 @@ export function parseBraxenBase(base: string): BraxenToken[] {
   return tokens;
 }
 
-/** IPA segments of a Base transcription (stress and boundaries dropped). */
-export function braxenSegments(base: string): string[] {
-  const out: string[] = [];
-  for (const t of parseBraxenBase(base)) {
-    if (t.type === "phoneme") out.push(BRAXEN_BASE_TO_IPA[t.symbol] ?? t.symbol);
-  }
-  return out;
-}
-
-export interface BraxenToIpaOptions {
-  /** Emit stress marks (default: false). */
-  stress?: boolean;
-}
-
-/** Render a Base transcription as concatenated IPA (boundaries dropped). */
-export function braxenToIpa(base: string, options: BraxenToIpaOptions = {}): string {
-  const withStress = options.stress ?? false;
-  let out = "";
-  for (const t of parseBraxenBase(base)) {
-    if (t.type === "boundary") continue;
-    if (t.type === "stress") {
-      if (withStress) out += STRESS_IPA[t.symbol] ?? "";
-      continue;
-    }
-    out += BRAXEN_BASE_TO_IPA[t.symbol] ?? t.symbol;
-  }
-  return out;
-}
-
 /* -------------------------------------------------------------------------- *
  * Braxen Base -> NST SAMPA (build-time)
  *
  * Used by `tools/build-braxen-lexicon.ts` so the runtime pipeline can keep its
  * canonical NST SAMPA alphabet while sourcing pronunciations from Braxen. The
- * table is chosen so the voice rendering is byte-identical to the auditioned
+ * table is chosen so the voice rendering is byte-identical to
  * `braxenVoiceIpa()`:
  *
  *   toVoiceIpa(braxenToNstSampa(base)) === braxenVoiceIpa(base)
@@ -397,21 +357,12 @@ export const NST_SAMPA_TO_IPA: Readonly<Record<string, string>> = {
   j: "j",
 };
 
-/** IPA segments of an NST SAMPA transcription (stress and boundaries dropped). */
-export function nstSegments(nst: string): string[] {
-  const out: string[] = [];
-  for (const t of parseNst(nst)) {
-    if (t.type === "phoneme") out.push(NST_SAMPA_TO_IPA[t.symbol] ?? t.symbol);
-  }
-  return out;
-}
-
 /* -------------------------------------------------------------------------- *
  * Voice (Piper) normalization
  *
  * The audit's equivalence is "Piper would produce the same result", so both
  * sides are also rendered in the alphabet fras actually hands to Piper
- * (`SV_VOICE_MAP`, the pre-espeak-ng-PR#2364 voice IPA). Distinctions that this
+ * (`SV_VOICE_MAP`, the Piper voice alphabet). Distinctions that this
  * conversion collapses (the four e-sounds, sje/retroflex notation, ...) must not
  * be reported as differences; distinctions it preserves (e.g. the length mark)
  * must.
@@ -484,28 +435,6 @@ function braxenIpaToVoice(ipa: string): string {
   return IPA_TO_VOICE.get(ipa) ?? BRAXEN_IPA_TO_VOICE[ipa] ?? ipa;
 }
 
-/** NST SAMPA -> the voice IPA segments fras emits to Piper (stress/boundaries dropped). */
-export function nstVoiceSegments(nst: string): string[] {
-  const out: string[] = [];
-  for (const t of parseNst(nst)) {
-    if (t.type === "phoneme") out.push(SV_VOICE_MAP[t.symbol] ?? t.symbol);
-  }
-  return out;
-}
-
-/** Braxen Base -> the voice IPA segments fras would emit to Piper. */
-export function braxenVoiceSegments(base: string): string[] {
-  const out: string[] = [];
-  for (const t of parseBraxenBase(base)) {
-    if (t.type !== "phoneme") continue;
-    const ipa = BRAXEN_BASE_TO_IPA[t.symbol];
-    if (ipa === undefined) continue;
-    const voice = braxenIpaToVoice(ipa);
-    if (voice) out.push(voice);
-  }
-  return out;
-}
-
 export interface BraxenToVoiceIpaOptions {
   /** Emit stress marks (default: true). */
   stress?: boolean;
@@ -517,14 +446,14 @@ export interface BraxenToVoiceIpaOptions {
  *
  * Syllable/compound/morpheme/word boundaries are dropped (the voice alphabet has
  * no symbol for them, exactly as `toVoiceIpa()` drops NST's `$`/`¤`/`_`), stress
- * becomes `ˈ`/`ˌ` where Braxen writes it, and every phoneme goes through the same
- * `braxenIpaToVoice` equivalence `braxenVoiceSegments` uses.
+ * becomes `ˈ`/`ˌ` where Braxen writes it, and every phoneme goes through
+ * `braxenIpaToVoice`.
  *
  * Braxen writes the stress mark immediately before the nucleus (`b 'i: . l ex n`
- * -> `bˈiːlən`), which is exactly what espeak-ng does and what the voices were
- * trained on, so no relocation is needed (cf. `toVoiceIpa()`, which likewise
- * emits the mark before the vowel). Used by the advisory listening harness
- * (`tools/audition.ts`).
+ * -> `bˈiːlən`), which is how the voices were trained, so no relocation is
+ * needed (cf. `toVoiceIpa()`, which likewise
+ * emits the mark before the vowel). Used by `tools/build-braxen-lexicon.ts` to
+ * assert the voice-equivalence invariant.
  */
 export function braxenVoiceIpa(
   base: string,
@@ -546,167 +475,3 @@ export function braxenVoiceIpa(
   return out;
 }
 
-/* -------------------------------------------------------------------------- *
- * Segment comparison (standard IPA + Piper output)
- * -------------------------------------------------------------------------- */
-
-export interface Alignment {
-  /** Levenshtein distance between the two segment sequences. */
-  distance: number;
-  /** Substitution/insertion/deletion pairs, as `[a, b]` ("" side uses `∅`). */
-  subs: Array<[string, string]>;
-}
-
-/** Align two segment sequences under a segment-equality predicate. */
-export function alignSegments(
-  a: readonly string[],
-  b: readonly string[],
-  eq: (x: string, y: string) => boolean,
-): Alignment {
-  const m = a.length;
-  const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
-  for (let i = 1; i <= m; i += 1) dp[i]![0] = i;
-  for (let j = 1; j <= n; j += 1) dp[0]![j] = j;
-  for (let i = 1; i <= m; i += 1) {
-    for (let j = 1; j <= n; j += 1) {
-      const cost = eq(a[i - 1]!, b[j - 1]!) ? 0 : 1;
-      dp[i]![j] = Math.min(
-        dp[i - 1]![j]! + 1,
-        dp[i]![j - 1]! + 1,
-        dp[i - 1]![j - 1]! + cost,
-      );
-    }
-  }
-
-  const subs: Array<[string, string]> = [];
-  let i = m;
-  let j = n;
-  while (i > 0 || j > 0) {
-    const here = dp[i]![j]!;
-    if (i > 0 && j > 0 && here === dp[i - 1]![j - 1]! + (eq(a[i - 1]!, b[j - 1]!) ? 0 : 1)) {
-      if (!eq(a[i - 1]!, b[j - 1]!)) subs.push([a[i - 1]!, b[j - 1]!]);
-      i -= 1;
-      j -= 1;
-    } else if (i > 0 && here === dp[i - 1]![j]! + 1) {
-      subs.push([a[i - 1]!, "∅"]);
-      i -= 1;
-    } else {
-      subs.push(["∅", b[j - 1]!]);
-      j -= 1;
-    }
-  }
-  subs.reverse();
-  return { distance: dp[m]![n]!, subs };
-}
-
-export type MatchClass = "match" | "inventory" | "real";
-
-export interface SegmentComparison {
-  /** Segment distance over standard IPA. */
-  strict: number;
-  /** Segment distance over the voice (Piper) segments. */
-  voice: number;
-  /** Standard-IPA substitutions (empty when `strict === 0`). */
-  subs: Array<[string, string]>;
-  /** Voice-segment substitutions (what Piper would render differently). */
-  voiceSubs: Array<[string, string]>;
-}
-
-/**
- * Compare two transcriptions as standard IPA (`strict`) and as the voice
- * segments Piper would receive (`voice`). A word can differ in IPA yet be
- * `match`/`inventory` if the difference is converted away on the way to Piper.
- */
-export function classifySegments(
-  nstIpa: readonly string[],
-  braxenIpa: readonly string[],
-  nstVoice: readonly string[],
-  braxenVoice: readonly string[],
-): SegmentComparison {
-  const strict = alignSegments(nstIpa, braxenIpa, (x, y) => x === y);
-  const voice = alignSegments(nstVoice, braxenVoice, (x, y) => x === y);
-  return {
-    strict: strict.distance,
-    voice: voice.distance,
-    subs: strict.subs,
-    voiceSubs: voice.subs,
-  };
-}
-
-/**
- * Bucket a comparison: identical IPA, different IPA but the same Piper output
- * (an inventory/notation difference), or a difference Piper would render
- * differently.
- */
-export function matchClass(strict: number, voice: number): MatchClass {
-  if (strict === 0) return "match";
-  return voice === 0 ? "inventory" : "real";
-}
-
-/* -------------------------------------------------------------------------- *
- * Built artifact: `data/braxen.jsonl.gz`
- * -------------------------------------------------------------------------- */
-
-export interface BraxenEntry {
-  /** Braxen Base transcription (field 1). */
-  base: string;
-  /** Part of speech / morphology (field 2). */
-  pos: string;
-  /** ISO 639-2 language code (field 3). */
-  lang: string;
-}
-
-interface RawBraxenRecord {
-  w: string;
-  v: string;
-  pos?: string;
-  lang?: string;
-}
-
-/** Parse the gzipped JSON-lines Braxen subset into headword -> entries. */
-export function parseBraxen(gz: Buffer): Map<string, BraxenEntry[]> {
-  const text = gunzipSync(gz).toString("utf8");
-  const map = new Map<string, BraxenEntry[]>();
-  for (const line of text.split("\n")) {
-    if (!line) continue;
-    const rec = JSON.parse(line) as RawBraxenRecord;
-    const entry: BraxenEntry = {
-      base: rec.v,
-      pos: rec.pos ?? "",
-      lang: rec.lang ?? "",
-    };
-    const list = map.get(rec.w);
-    if (list) list.push(entry);
-    else map.set(rec.w, [entry]);
-  }
-  return map;
-}
-
-/** Walk up from `start` to the directory holding `package.json`. */
-function findPackageRoot(start: string): string {
-  let dir = start;
-  for (;;) {
-    if (existsSync(join(dir, "package.json"))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) return start;
-    dir = parent;
-  }
-}
-
-const ROOT = findPackageRoot(dirname(fileURLToPath(import.meta.url)));
-
-/** The committed Braxen subset built by `tools/build-braxen.ts`. */
-export const BRAXEN_PATH = join(ROOT, "data", "braxen.jsonl.gz");
-
-let cached: Map<string, BraxenEntry[]> | null = null;
-
-/** Load the Braxen subset (cached). */
-export function braxenIndex(): Map<string, BraxenEntry[]> {
-  if (cached) return cached;
-  if (!existsSync(BRAXEN_PATH)) {
-    throw new Error(`braxen table not found at ${BRAXEN_PATH}; run: npm run build:braxen`);
-  }
-  cached = parseBraxen(readFileSync(BRAXEN_PATH));
-  return cached;
-}

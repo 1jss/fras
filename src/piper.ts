@@ -9,9 +9,9 @@
  *
  * Two consequences:
  *
- * - the block must speak the pre-espeak-ng-PR#2364 alphabet (fras already does:
- *   `r` + `t/d/l/n`, never `ʈ ɖ ɭ ɳ`, and `ʃ`, never `ɧ`), so no post-processing
- *   like `tools/piper_patch.py` is needed;
+ * - the block must speak the phoneme inventory the voices were trained on (fras
+ *   already does: `r` + `t/d/l/n`, never `ʈ ɖ ɭ ɳ`, and `ʃ`, never `ɧ`), so no
+ *   post-processing like `tools/piper_patch.py` is needed;
  * - characters the voices' `phoneme_id_map` does not contain are dropped, so
  *   typographic punctuation is mapped to a safe equivalent first.
  */

@@ -27,7 +27,7 @@ import { parseNst } from "./sampa.ts";
 import { toVoiceIpa, SV_PROFILE, type VoiceProfile } from "./to-voice-ipa.ts";
 import { tokenize, type Token } from "./tokenize.ts";
 
-export type PhonemeSource = "override" | "lexicon" | "morphology" | "rules" | "g2p";
+export type PhonemeSource = "override" | "lexicon" | "morphology" | "rules";
 
 export interface PhonetizeOptions {
   /** Lexicon to use; `null` disables lookup. Defaults to the built-in lexicon. */
@@ -44,8 +44,6 @@ export interface PhonetizeOptions {
    * with the built-in lexicon — an injected `lexicon` takes over resolution.
    */
   ruleIndex?: boolean;
-  /** Replace the whole pipeline with a custom G2P (e.g. a learned model). */
-  g2p?: G2P;
 }
 
 export interface WordResult {
@@ -64,10 +62,6 @@ function resolveLexicon(opts: PhonetizeOptions): Lexicon | null {
 
 /** Phonetize a single word into canonical NST SAMPA. */
 export function phonetizeWord(word: string, opts: PhonetizeOptions = {}): WordResult {
-  if (opts.g2p) {
-    return { word, variants: opts.g2p.phonetize(word), source: "g2p" };
-  }
-
   if (opts.overrides ?? true) {
     const override = OVERRIDES[word.toLowerCase()];
     if (override && override.length > 0) {
@@ -199,22 +193,3 @@ export function textToIpa(
     .map((t) => (t.kind === "word" ? t.ipa : t.text))
     .join("");
 }
-
-/**
- * The pluggable grapheme-to-phoneme seam.
- *
- * Rules, lexicon and a future learned/compressed model are interchangeable
- * implementations: all that is required is to return canonical NST SAMPA for a
- * word. The NST lexicon doubles as the training/validation set (`npm run eval`).
- */
-export interface G2P {
-  /** Canonical NST SAMPA variants for a word, best first. */
-  phonetize(word: string): string[];
-}
-
-/** Default G2P: overrides + lexicon + morphology + rules. */
-export const defaultG2P: G2P = {
-  phonetize(word: string): string[] {
-    return phonetizeWord(word).variants;
-  },
-};

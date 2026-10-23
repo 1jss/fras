@@ -8,7 +8,7 @@
  * alphabet a Piper voice was trained on happens only at the edge
  * (`to-voice-ipa.ts`).
  *
- * Symbol reference (see `data/nst-xsampa.sym`):
+ * Symbol reference:
  *
  *   Vowels   i: I  e: e  E: E  y: Y  }: u0  u: U  o: O  2: 9  a A: @  a*U E*U
  *   Cons.    p b t d k g m n N f v r l s h j  t` d` n` l` s`  x\  s'

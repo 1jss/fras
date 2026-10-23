@@ -2,9 +2,10 @@
  * Swedish letter-to-sound rules (generic layer), emitting **NST SAMPA**.
  *
  * Seeded from espeak-ng's `dictsource/sv_rules` / `sv_list` but rewritten to
- * target NST's alphabet and to be corrected against the NST lexicon via
- * `npm run eval`. This is deliberately a headstart, not a finished rule set:
- * stress and many loan/irregular words are still handled by the lexicon.
+ * target NST's alphabet and to be corrected against the lexicon (see the
+ * rule-coverage dry run in `tools/prune-lexicon.ts`). This is deliberately a
+ * headstart, not a finished rule set: stress and many loan/irregular words are
+ * still handled by the lexicon.
  */
 
 import { compileRules, type Rule } from "./engine.ts";
